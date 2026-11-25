@@ -423,6 +423,13 @@ class PlaybackView(_BaseView):
         hass = request.app["hass"]
         coordinator = _get_coordinator(hass, device_id)
         chan = _get_channel(coordinator, channel)
+        # PATCHED 18 Nov: stop=1 ends this viewer's playback stream at once.
+        if request.query.get("stop") in ("1", "true", "yes"):
+            clients = hass.data.setdefault("hikvision_nvr_pb_clients", {})
+            previous = clients.pop(request.query.get("client", ""), None)
+            if previous:
+                await _async_stop_stream(hass, previous)
+            return self.json({"stopped": bool(previous)})
         start, end = _time_range(request)
         if end - start > timedelta(hours=6):
             raise web.HTTPBadRequest(reason="playback range must not exceed 6 hours")
@@ -457,6 +464,17 @@ class PlaybackView(_BaseView):
                 f"pb-{coordinator.slug}-{chan.id}"
                 f"-{start.timestamp()}-{end.timestamp()}"
             )
+            # PATCHED 18 Nov: one playback stream per viewer (client=<page id>).
+            # The clip that viewer was on is stopped now, not left to idle.
+            client = request.query.get("client")
+            if client:
+                clients = hass.data.setdefault("hikvision_nvr_pb_clients", {})
+                previous = clients.get(client)
+                if previous and previous != key:
+                    await _async_stop_stream(hass, previous)
+                clients[client] = key
+                while len(clients) > 50:
+                    clients.pop(next(iter(clients)))
             stream = await async_get_stream(hass, key, source)
             payload["hls_url"] = stream.endpoint_url(HLS_PROVIDER)
 
@@ -887,3 +905,15 @@ def async_register_api(hass: HomeAssistant) -> None:
     hass.data[f"{DOMAIN}_api_registered"] = True
     for view in _VIEWS:
         hass.http.register_view(view)
+    # PATCHED: person / vehicle markers for the timeline (see detections.py).
+    from .detections import (
+        DetectionPictureView,
+        DetectionsView,
+        DetectionThumbView,
+        async_start_prefetch,
+    )
+
+    hass.http.register_view(DetectionsView())
+    hass.http.register_view(DetectionPictureView())
+    hass.http.register_view(DetectionThumbView())
+    async_start_prefetch(hass)

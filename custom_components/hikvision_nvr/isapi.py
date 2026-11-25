@@ -24,6 +24,7 @@ from xml.etree import ElementTree as ET
 import aiohttp
 from defusedxml import ElementTree as DET
 from yarl import URL
+from homeassistant.util import dt as _dt_util  # PATCHED: this NVR reads Z times as local time
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -202,12 +203,12 @@ def _parse_time(value: str) -> datetime:
     # Compact form used inside playback URIs: 20260810T000024Z
     if "-" not in value and len(value) >= 16:
         return datetime.strptime(value[:16], "%Y%m%dT%H%M%SZ").replace(
-            tzinfo=UTC
-        )
+            tzinfo=_dt_util.get_default_time_zone()
+        ).astimezone(UTC)
     # ISO with or without offset; Python needs +HH:MM, Hikvision sometimes emits Z.
-    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    parsed = datetime.fromisoformat(value.removesuffix("Z"))
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
+        parsed = parsed.replace(tzinfo=_dt_util.get_default_time_zone())
     return parsed.astimezone(UTC)
 
 
@@ -215,7 +216,7 @@ def to_isapi_time(value: datetime) -> str:
     """Render a datetime the way the search API expects (always UTC)."""
     if value.tzinfo is None:
         value = value.replace(tzinfo=UTC)
-    return value.astimezone(UTC).strftime(_TIME_FMT)
+    return value.astimezone(_dt_util.get_default_time_zone()).strftime(_TIME_FMT)
 
 
 class _Digest:
@@ -614,8 +615,8 @@ class HikvisionISAPI:
     ) -> str:
         """RTSP URL that replays a time range from the NVR's disks."""
         fmt = "%Y%m%dT%H%M%SZ"
-        start_s = start.astimezone(UTC).strftime(fmt)
-        end_s = end.astimezone(UTC).strftime(fmt)
+        start_s = start.astimezone(_dt_util.get_default_time_zone()).strftime(fmt)
+        end_s = end.astimezone(_dt_util.get_default_time_zone()).strftime(fmt)
         return (
             f"{self._rtsp_root(credentials)}"
             f"/Streaming/tracks/{channel * 100 + 1}"

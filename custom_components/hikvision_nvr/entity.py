@@ -36,7 +36,6 @@ class HikvisionEntity(CoordinatorEntity[HikvisionCoordinator]):
                 name=channel.name,
                 manufacturer="Hikvision",
                 model=f"{info.get('model', 'NVR')} channel {channel.id}",
-                via_device=nvr_id,
                 configuration_url=(
                     f"http://{channel.ip_address}" if channel.ip_address else None
                 ),

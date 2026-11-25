@@ -61,27 +61,11 @@ async def async_setup_frontend(hass: HomeAssistant) -> None:
 
     # Loads the card on every dashboard, so `type: custom:hikvision-nvr-card`
     # just works without a Resources entry.
-    add_extra_js_url(hass, card_url)
+    # PATCHED OFF (loads before the Firefox element polyfill, card then never registers): add_extra_js_url(hass, card_url)
     # Lovelace may not be set up yet -- we run during async_setup. Wait for
     # start, so the resource lands whatever the component ordering.
     async_at_started(hass, _async_register_lovelace_resource)
 
-    async_register_built_in_panel(
-        hass,
-        "custom",
-        sidebar_title="Cameras",
-        sidebar_icon="mdi:cctv",
-        frontend_url_path=PANEL_PATH,
-        require_admin=False,
-        config={
-            "_panel_custom": {
-                "name": "hikvision-nvr-panel",
-                "module_url": panel_url,
-                "embed_iframe": False,
-                "trust_external": False,
-            }
-        },
-    )
     _LOGGER.debug("Hikvision NVR frontend registered at %s", card_url)
 
 

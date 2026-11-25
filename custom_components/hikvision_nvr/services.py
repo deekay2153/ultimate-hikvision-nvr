@@ -297,14 +297,3 @@ def async_setup_services(hass: HomeAssistant) -> None:
         schema=EXPORT_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
     )
-    hass.services.async_register(DOMAIN, SERVICE_PTZ, ptz, schema=PTZ_SCHEMA)
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_ENABLE_NOTIFICATIONS,
-        enable_notifications,
-        schema=NOTIFICATIONS_SCHEMA,
-        supports_response=SupportsResponse.OPTIONAL,
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_REBOOT, reboot, schema=REBOOT_SCHEMA
-    )

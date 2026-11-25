@@ -105,9 +105,9 @@ class HikvisionConfigFlow(ConfigFlow, domain=DOMAIN):
                     title=api.device_info.get("name") or api.host,
                     data=user_input,
                     options={
-                        CONF_STREAM: STREAM_MAIN,
+                        CONF_STREAM: STREAM_SUB,
                         CONF_SNAPSHOT_STREAM: STREAM_SUB,
-                        CONF_CHANNELS: [str(c.id) for c in api.channels],
+                        CONF_CHANNELS: [], CONF_EVENTS: [],  # PATCHED: playback only
                     },
                 )
 

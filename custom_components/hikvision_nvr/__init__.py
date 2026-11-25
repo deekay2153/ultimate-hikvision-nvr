@@ -81,7 +81,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HikvisionConfigEntry) ->
     coordinator = HikvisionCoordinator(hass, entry, api)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
-    coordinator.start_event_listener()
+    # PATCHED OFF (no second alertStream): coordinator.start_event_listener()
 
     # Register the NVR itself before the platforms register cameras that point
     # at it with via_device -- HA warns (and from 2025.12 will fail) if a
@@ -90,7 +90,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HikvisionConfigEntry) ->
     dr.async_get(hass).async_get_or_create(
         config_entry_id=entry.entry_id,
         identifiers={(DOMAIN, coordinator.device_id)},
-        connections={(dr.CONNECTION_NETWORK_MAC, info["mac"])} if info.get("mac") else set(),
+        connections=set(),  # PATCHED: no MAC link, avoids merging with other Hikvision devices
         name=info.get("name") or api.host,
         manufacturer="Hikvision",
         model=info.get("model"),
@@ -100,7 +100,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HikvisionConfigEntry) ->
     )
 
     _async_remove_obsolete_entities(hass, entry, coordinator)
-    await _async_check_notifications(hass, entry, api)
+    # PATCHED OFF: await _async_check_notifications(hass, entry, api)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_reload_on_options))
