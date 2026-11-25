@@ -1,49 +1,25 @@
-<img src="custom_components/hikvision_nvr/brand/logo.png" alt="Hikvision NVR for Home Assistant" width="420">
+# Ultimate Hikvision NVR
 
-# Ultimate Hikvision NVR for Home Assistant
+**Your Hikvision recorder, properly in Home Assistant.** Live view, playback straight from the NVR's disks, every person and vehicle it spots, and a PTZ you can aim with a tap. Added from the UI, no YAML.
 
 [![Validate](https://github.com/deekay2153/ultimate-hikvision-nvr/actions/workflows/validate.yml/badge.svg)](https://github.com/deekay2153/ultimate-hikvision-nvr/actions/workflows/validate.yml)
 [![Release](https://img.shields.io/github/v/release/deekay2153/ultimate-hikvision-nvr?sort=semver)](https://github.com/deekay2153/ultimate-hikvision-nvr/releases)
 [![HACS: custom](https://img.shields.io/badge/HACS-custom-41BDF5.svg)](https://hacs.xyz/)
-[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.2%2B-41BDF5.svg)](https://www.home-assistant.io/)
 [![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/deekay2153)
-[![Licence: MIT](https://img.shields.io/badge/licence-MIT-black.svg)](LICENSE)
 
-![Ultimate Hikvision NVR card: a camera wall with live tiles, a 24-hour bar of people and vehicles, and a detections list](https://raw.githubusercontent.com/deekay2153/ultimate-hikvision-nvr-card/main/docs/wall.jpg)
+![The camera wall, made with the Ultimate Hikvision NVR card](https://raw.githubusercontent.com/deekay2153/ultimate-hikvision-nvr-card/main/docs/wall.jpg)
 
-<sub>Shown with the [Ultimate Hikvision NVR card](https://github.com/deekay2153/ultimate-hikvision-nvr-card), camera pictures blurred with its screenshot mode.</sub>
+- **Every camera as a Home Assistant camera**, with live view in the app, on the web and on a Chromecast.
+- **Playback from the NVR itself.** Scrub a day, play any moment, save a clip. No second copy of your footage.
+- **Person and vehicle search** from the recorder's own AI (AcuSense), with photos.
+- **PTZ tap-to-aim** and your named presets.
+- **Recorder health:** disks, free space, uptime, and which cameras are online.
 
-Live view, recorded-history playback with **person and vehicle markers**, PTZ
-with tap-to-aim, motion events and a full REST API for a Hikvision NVR/DVR — as
-a native Home Assistant integration, added from the UI.
+> **Want the wall in the picture?** Add the
+> **[Ultimate Hikvision NVR card](https://github.com/deekay2153/ultimate-hikvision-nvr-card)**.
+> This integration is the recorder side; the card is the wall.
 
-This is a fork of [techmarkai/hikvision-nvr-ha](https://github.com/techmarkai/hikvision-nvr-ha)
-1.0.0 (MIT), with the fixes from running it every day on a real recorder. It
-keeps the same domain (`hikvision_nvr`), so it replaces the original in place.
-It is also the back end for the **[Ultimate Hikvision NVR card](https://github.com/deekay2153/ultimate-hikvision-nvr-card)**,
-a camera wall with a live grid, a PTZ joystick and a detections timeline.
-
-Verified on a 10-channel Hikvision NVR with a dual-lens PTZ, H.265 main streams
-and H.264 sub streams, on Home Assistant 2026.11; the original was developed on
-a DS-7608NI-K2/8P, firmware V4.40.015. Capabilities are read from the device
-rather than assumed, so other ISAPI models work to the extent their firmware
-exposes the same surfaces. Reports from other models are welcome.
-
-## What this fork changes
-
-| | |
-|---|---|
-| **Recordings in the right time zone** | Hikvision search and playback times are the recorder's own clock time, even with a trailing `Z`. 1.0.0 read them as UTC, so outside UTC every recording was hours out. Home Assistant's time zone is used, or set *Recorder time zone*. |
-| **Works on Home Assistant 2026.10+** | On 2026.10 the original's camera entities failed to load (its open issue #2); the fork drops the `via_device` link that triggered it, so cameras are no longer grouped under the recorder. |
-| **Person / vehicle detections** | The recorder's own smart search (AcuSense), with thumbnails, kept in a small index so a day is searched once. Recorders without it are noticed and left alone. |
-| **PTZ tap-to-aim and presets** | `ptz_aim` points the camera at a spot in its picture or zooms in to a box; `ptz_presets` lists named presets and never offers the command numbers (94 is *Remote reboot*). |
-| **Smoother replays on iPhone / iPad** | One playback stream per viewer: a clip you leave is stopped at once instead of idling and competing with the next. |
-| **Events are opt-in** | The alert stream is one long-lived connection to the recorder; it only opens when you choose events. |
-| **No sidebar panel, no injected script** | The card is a dashboard resource. The injected copy never registered in Firefox. |
-
-> **Want the camera wall in the screenshot above?** Install the
-> [Ultimate Hikvision NVR card](https://github.com/deekay2153/ultimate-hikvision-nvr-card)
-> as well. This integration does the recorder side; the card is the wall.
+A fork of [techmarkai/hikvision-nvr-ha](https://github.com/techmarkai/hikvision-nvr-ha) 1.0.0 (MIT), with the fixes from running it every day on a real recorder. Same domain (`hikvision_nvr`), so it replaces the original in place.
 
 ## What you get
 
@@ -58,6 +34,25 @@ exposes the same surfaces. Reports from other models are welcome.
 | **REST API** | `/api/hikvision_nvr/…` for third-party mobile apps, using ordinary Home Assistant tokens. |
 | **Detections** | Person and vehicle detections per channel and day, with thumbnails, for timelines (`/api/hikvision_nvr/{device}/{channel}/detections`). |
 | **Services** | Search recordings, export a clip to MP4, PTZ move / aim / presets, enable notifications, reboot. |
+
+## What this fork changes
+
+| | |
+|---|---|
+| **Recordings in the right time zone** | Hikvision search and playback times are the recorder's own clock time, even with a trailing `Z`. 1.0.0 read them as UTC, so outside UTC every recording was hours out. Home Assistant's time zone is used, or set *Recorder time zone*. |
+| **Works on Home Assistant 2026.10+** | On 2026.10 the original's camera entities failed to load (its open issue #2); the fork drops the `via_device` link that triggered it, so cameras are no longer grouped under the recorder. |
+| **Person / vehicle detections** | The recorder's own smart search (AcuSense), with thumbnails, kept in a small index so a day is searched once. Recorders without it are noticed and left alone. |
+| **PTZ tap-to-aim and presets** | `ptz_aim` points the camera at a spot in its picture or zooms in to a box; `ptz_presets` lists named presets and never offers the command numbers (94 is *Remote reboot*). |
+| **Smoother replays on iPhone / iPad** | One playback stream per viewer: a clip you leave is stopped at once instead of idling and competing with the next. |
+| **Events are opt-in** | The alert stream is one long-lived connection to the recorder; it only opens when you choose events. |
+| **No sidebar panel, no injected script** | The card is a dashboard resource. The injected copy never registered in Firefox. |
+
+
+Verified on a 10-channel Hikvision NVR with a dual-lens PTZ, H.265 main streams
+and H.264 sub streams, on Home Assistant 2026.11; the original was developed on
+a DS-7608NI-K2/8P, firmware V4.40.015. Capabilities are read from the device
+rather than assumed, so other ISAPI models work to the extent their firmware
+exposes the same surfaces. Reports from other models are welcome.
 
 ## Install
 
