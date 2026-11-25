@@ -20,8 +20,7 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/deekay2153/ultimate-hikvision-nvr/issues",
   "requirements": [
-    "defusedxml>=0.7.1",
-    "Pillow>=10.0.0"
+    "defusedxml>=0.7.1"
   ],
   "version": "1.1.0"
 }
