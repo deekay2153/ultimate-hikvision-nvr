@@ -28,6 +28,8 @@ from .const import (
     SERVICE_ENABLE_NOTIFICATIONS,
     SERVICE_EXPORT_RECORDING,
     SERVICE_PTZ,
+    SERVICE_PTZ_AIM,
+    SERVICE_PTZ_PRESETS,
     SERVICE_REBOOT,
     SERVICE_SEARCH_RECORDINGS,
 )
@@ -84,6 +86,20 @@ PTZ_SCHEMA = vol.Schema(
         ),
     }
 )
+
+_PERCENT = vol.All(vol.Coerce(float), vol.Range(min=0, max=100))
+
+PTZ_AIM_SCHEMA = vol.Schema(
+    {
+        **_BASE,
+        vol.Required("x"): _PERCENT,
+        vol.Required("y"): _PERCENT,
+        vol.Inclusive("x2", "box"): _PERCENT,
+        vol.Inclusive("y2", "box"): _PERCENT,
+    }
+)
+
+PTZ_PRESETS_SCHEMA = vol.Schema(_BASE)
 
 REBOOT_SCHEMA = vol.Schema({vol.Optional(ATTR_DEVICE_ID): cv.string})
 
@@ -255,6 +271,27 @@ def async_setup_services(hass: HomeAssistant) -> None:
         except HikvisionError as err:
             raise HomeAssistantError(f"PTZ failed: {err}") from err
 
+    async def ptz_aim(call: ServiceCall) -> None:
+        coordinator = _resolve(hass, call.data.get(ATTR_DEVICE_ID))
+        try:
+            await coordinator.api.async_ptz_aim(
+                call.data[ATTR_CHANNEL],
+                call.data["x"],
+                call.data["y"],
+                call.data.get("x2"),
+                call.data.get("y2"),
+            )
+        except HikvisionError as err:
+            raise HomeAssistantError(f"PTZ aim failed: {err}") from err
+
+    async def ptz_presets(call: ServiceCall) -> ServiceResponse:
+        coordinator = _resolve(hass, call.data.get(ATTR_DEVICE_ID))
+        try:
+            presets = await coordinator.api.async_ptz_presets(call.data[ATTR_CHANNEL])
+        except HikvisionError as err:
+            raise HomeAssistantError(f"Could not read presets: {err}") from err
+        return {"presets": presets}
+
     async def enable_notifications(call: ServiceCall) -> ServiceResponse:
         coordinator = _resolve(hass, call.data.get(ATTR_DEVICE_ID))
         dry_run = call.data[ATTR_DRY_RUN]
@@ -298,6 +335,14 @@ def async_setup_services(hass: HomeAssistant) -> None:
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(DOMAIN, SERVICE_PTZ, ptz, schema=PTZ_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_PTZ_AIM, ptz_aim, schema=PTZ_AIM_SCHEMA)
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_PTZ_PRESETS,
+        ptz_presets,
+        schema=PTZ_PRESETS_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
     hass.services.async_register(
         DOMAIN,
         SERVICE_ENABLE_NOTIFICATIONS,

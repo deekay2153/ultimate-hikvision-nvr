@@ -181,6 +181,13 @@ class Event:
         return self.state == "active"
 
 
+# Preset numbers Hikvision PTZ cameras treat as commands, not positions
+# (auto-flip, back to origin, patrols, patterns, day / night, demist, limits,
+# remote reboot, OSD menu, scans). Seen on a DS-2SE series dual-lens PTZ and in
+# Hikvision's special preset list; going to one runs the command.
+PTZ_COMMAND_PRESETS = frozenset([*range(33, 47), 50, *range(92, 106)])
+
+
 def _strip_ns(element: ET.Element) -> ET.Element:
     for node in element.iter():
         node.tag = _NS_RE.sub("", node.tag)
@@ -881,6 +888,65 @@ class HikvisionISAPI:
         await self.request(
             "PUT", f"/ISAPI/PTZCtrl/channels/{channel}/presets/{preset}/goto"
         )
+
+    async def async_ptz_aim(
+        self,
+        channel: int,
+        x: float,
+        y: float,
+        x2: float | None = None,
+        y2: float | None = None,
+    ) -> None:
+        """Point the camera at a spot in its picture, or zoom in to a box.
+
+        x / y are percent of the picture from its left and top edge (50 / 50 is
+        the centre). With x2 / y2 (the box's bottom-right corner) the camera
+        zooms in to the box. Hikvision's 3D positioning counts 0-255 with Y
+        from the bottom.
+        """
+
+        def scale(value: float, flip: bool) -> int:
+            value = min(max(float(value), 0.0), 100.0)
+            return round((100.0 - value if flip else value) * 2.55)
+
+        sx, sy = scale(x, False), scale(y, True)
+        ex = scale(x2, False) if x2 is not None and y2 is not None else sx
+        ey = scale(y2, True) if x2 is not None and y2 is not None else sy
+        body = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            f"<Position3D><StartPoint><positionX>{sx}</positionX>"
+            f"<positionY>{sy}</positionY></StartPoint><EndPoint>"
+            f"<positionX>{ex}</positionX><positionY>{ey}</positionY>"
+            "</EndPoint></Position3D>"
+        )
+        await self.request(
+            "PUT", f"/ISAPI/PTZCtrl/channels/{channel}/position3D", data=body
+        )
+
+    async def async_ptz_presets(self, channel: int) -> list[dict[str, Any]]:
+        """Presets someone has named: [{id, name}].
+
+        A Hikvision PTZ lists every slot (often all 256) as enabled, named
+        "Preset <n>" whether or not a position was ever saved, so an unnamed
+        slot cannot be told apart from a saved one and is left out. Some
+        numbers are built-in commands rather than positions (94 is "Remote
+        reboot", others start scans or set limits); going to one runs the
+        command, so those are never listed.
+        """
+        root = await self.get_xml(f"/ISAPI/PTZCtrl/channels/{channel}/presets")
+        presets: list[dict[str, Any]] = []
+        for node in root.findall("PTZPreset"):
+            if _text(node, "enabled", "true").lower() == "false":
+                continue
+            try:
+                preset_id = int(_text(node, "id"))
+            except ValueError:
+                continue
+            name = _text(node, "presetName")
+            if preset_id in PTZ_COMMAND_PRESETS or not name or name == f"Preset {preset_id}":
+                continue
+            presets.append({"id": preset_id, "name": name})
+        return presets
 
     async def async_missing_notifications(self) -> list[str]:
         """Detection triggers that record but never announce.

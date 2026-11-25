@@ -105,6 +105,64 @@ ptz:
           step: 0.1
           unit_of_measurement: s
 
+ptz_aim:
+  fields:
+    device_id:
+      selector:
+        text:
+    channel:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 64
+          mode: box
+    x:
+      required: true
+      default: 50
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 0.1
+          unit_of_measurement: "%"
+    y:
+      required: true
+      default: 50
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 0.1
+          unit_of_measurement: "%"
+    x2:
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 0.1
+          unit_of_measurement: "%"
+    y2:
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 0.1
+          unit_of_measurement: "%"
+
+ptz_presets:
+  fields:
+    device_id:
+      selector:
+        text:
+    channel:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 64
+          mode: box
+
 reboot:
   fields:
     device_id:

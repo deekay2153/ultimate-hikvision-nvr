@@ -141,6 +141,50 @@
         }
       }
     },
+    "ptz_aim": {
+      "name": "PTZ aim",
+      "description": "Point a PTZ camera at a spot in its picture, or zoom in to a box (3D positioning).",
+      "fields": {
+        "device_id": {
+          "name": "NVR",
+          "description": "Serial, host, or config entry id."
+        },
+        "channel": {
+          "name": "Channel",
+          "description": "Camera channel number."
+        },
+        "x": {
+          "name": "X",
+          "description": "Percent of the picture from its left edge (50 = centre)."
+        },
+        "y": {
+          "name": "Y",
+          "description": "Percent of the picture from its top edge (50 = centre)."
+        },
+        "x2": {
+          "name": "Box right",
+          "description": "Optional: right edge of a box to zoom in to, percent from the left."
+        },
+        "y2": {
+          "name": "Box bottom",
+          "description": "Optional: bottom edge of a box to zoom in to, percent from the top."
+        }
+      }
+    },
+    "ptz_presets": {
+      "name": "PTZ presets",
+      "description": "List a PTZ camera's named presets (id and name). Unnamed slots and the camera's built-in command presets are left out.",
+      "fields": {
+        "device_id": {
+          "name": "NVR",
+          "description": "Serial, host, or config entry id."
+        },
+        "channel": {
+          "name": "Channel",
+          "description": "Camera channel number."
+        }
+      }
+    },
     "reboot": {
       "name": "Reboot",
       "description": "Reboot the NVR. Requires an admin account.",

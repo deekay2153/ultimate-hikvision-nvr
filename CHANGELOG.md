@@ -30,6 +30,11 @@ A fork of [techmarkai/hikvision-nvr-ha](https://github.com/techmarkai/hikvision-
 - **No sidebar panel, no injected script.** The card is added as a dashboard
   resource; the injected copy ran before Firefox's custom element support was
   ready and never registered.
+- **PTZ tap-to-aim and preset list.** `hikvision_nvr.ptz_aim` points a PTZ at
+  a spot in its picture or zooms in to a box (3D positioning);
+  `hikvision_nvr.ptz_presets` returns the presets someone has named. Unnamed
+  slots are left out (the camera reports all of them as in use), and so are
+  the numbers Hikvision uses as commands -- 94 is *Remote reboot*.
 - The recorder device no longer carries its MAC address, which made Home
   Assistant merge it into other Hikvision integrations' devices.
 

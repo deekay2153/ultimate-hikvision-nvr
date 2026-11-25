@@ -9,6 +9,12 @@
     "ptz": {
       "service": "mdi:axis-arrow"
     },
+    "ptz_aim": {
+      "service": "mdi:crosshairs-gps"
+    },
+    "ptz_presets": {
+      "service": "mdi:format-list-bulleted"
+    },
     "reboot": {
       "service": "mdi:restart"
     },
