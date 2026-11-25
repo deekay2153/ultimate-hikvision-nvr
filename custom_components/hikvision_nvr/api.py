@@ -206,6 +206,19 @@ class DevicesView(_BaseView):
         return self.json({"devices": devices})
 
 
+class RecordingStatusView(_BaseView):
+    """GET /api/hikvision_nvr/{device_id}/recording"""
+
+    url = "/api/hikvision_nvr/{device_id}/recording"
+    name = "api:hikvision_nvr:recording"
+
+    @_handle_errors
+    async def get(self, request: web.Request, device_id: str) -> web.Response:
+        coordinator = _get_coordinator(request.app["hass"], device_id)
+        status = await coordinator.api.async_recording_status()
+        return self.json({"channels": {str(ch): on for ch, on in sorted(status.items())}})
+
+
 class ChannelsView(_BaseView):
     """GET /api/hikvision_nvr/{device_id}/channels"""
 
@@ -884,6 +897,7 @@ async def _async_stop_stream(hass: HomeAssistant, key: str) -> None:
 _VIEWS = (
     DevicesView,
     ChannelsView,
+    RecordingStatusView,
     SnapshotView,
     RecordingsView,
     TimelineView,

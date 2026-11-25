@@ -130,6 +130,16 @@ The channel list on its own, with ready-made URLs.
 
 ---
 
+### `GET /api/hikvision_nvr/{device_id}/recording`
+
+Which channels the recorder is recording right now, from its working status
+(JSON where the firmware offers it, XML otherwise). Cheap enough to poll every
+few seconds while a page is on screen; the card uses it for its REC badges.
+
+```json
+{ "channels": { "1": true, "2": false, "5": true } }
+```
+
 ### `GET /api/hikvision_nvr/{device_id}/{channel}/snapshot`
 
 A JPEG, right now.

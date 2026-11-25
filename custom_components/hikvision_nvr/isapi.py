@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import os
 import re
@@ -893,6 +894,30 @@ class HikvisionISAPI:
         await self.request(
             "PUT", f"/ISAPI/PTZCtrl/channels/{channel}/presets/{preset}/goto"
         )
+
+    async def async_recording_status(self) -> dict[int, bool]:
+        """Which channels the recorder is recording right now.
+
+        From the working status (JSON where the firmware offers it, XML
+        otherwise). Channels it does not mention are left out.
+        """
+        status: dict[int, bool] = {}
+        try:
+            response = await self.request("GET", "/ISAPI/System/workingstatus?format=json")
+            data = json.loads(await response.text())
+            for chan in (data.get("WorkingStatus") or {}).get("ChanStatus") or []:
+                if "chanNo" in chan:
+                    status[int(chan["chanNo"])] = chan.get("record") == 1
+            return status
+        except (ValueError, AttributeError, TypeError, UnsupportedOperation):
+            pass
+        root = await self.get_xml("/ISAPI/System/workingstatus")
+        for node in root.iter("ChanStatus"):
+            try:
+                status[int(_text(node, "chanNo"))] = _text(node, "record") in ("1", "true")
+            except ValueError:
+                continue
+        return status
 
     async def async_ptz_aim(
         self,
