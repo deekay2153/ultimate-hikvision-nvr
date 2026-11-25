@@ -1,19 +1,40 @@
 <img src="custom_components/hikvision_nvr/brand/logo.png" alt="Hikvision NVR for Home Assistant" width="420">
 
-# Hikvision NVR for Home Assistant
+# Hikvision NVR Wall for Home Assistant
 
-[![Validate](https://github.com/techmarkai/hikvision-nvr-ha/actions/workflows/validate.yml/badge.svg)](https://github.com/techmarkai/hikvision-nvr-ha/actions/workflows/validate.yml)
-[![Release](https://img.shields.io/github/v/release/techmarkai/hikvision-nvr-ha?sort=semver)](https://github.com/techmarkai/hikvision-nvr-ha/releases)
+[![Validate](https://github.com/deekay2153/hikvision-nvr-wall/actions/workflows/validate.yml/badge.svg)](https://github.com/deekay2153/hikvision-nvr-wall/actions/workflows/validate.yml)
+[![Release](https://img.shields.io/github/v/release/deekay2153/hikvision-nvr-wall?sort=semver)](https://github.com/deekay2153/hikvision-nvr-wall/releases)
 [![HACS: custom](https://img.shields.io/badge/HACS-custom-41BDF5.svg)](https://hacs.xyz/)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.2%2B-41BDF5.svg)](https://www.home-assistant.io/)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-black.svg)](LICENSE)
 
-Live view, recorded-history playback, motion events and a full REST API for a
-Hikvision NVR/DVR — as a native Home Assistant integration, added from the UI.
+Live view, recorded-history playback with **person and vehicle markers**, PTZ
+with tap-to-aim, motion events and a full REST API for a Hikvision NVR/DVR — as
+a native Home Assistant integration, added from the UI.
 
-Developed and verified against a **DS-7608NI-K2/8P, firmware V4.40.015, 8
-channels**. Capabilities are read from the device rather than assumed, so other
-ISAPI models work to the extent their firmware exposes the same surfaces.
+This is a fork of [techmarkai/hikvision-nvr-ha](https://github.com/techmarkai/hikvision-nvr-ha)
+1.0.0 (MIT), with the fixes from running it every day on a real recorder. It
+keeps the same domain (`hikvision_nvr`), so it replaces the original in place.
+It is also the back end for the **[Hikvision NVR Wall card](https://github.com/deekay2153/hikvision-nvr-wall-card)**,
+a camera wall with a live grid, a PTZ joystick and a detections timeline.
+
+Verified on a 10-channel Hikvision NVR with a dual-lens PTZ, H.265 main streams
+and H.264 sub streams, on Home Assistant 2026.11; the original was developed on
+a DS-7608NI-K2/8P, firmware V4.40.015. Capabilities are read from the device
+rather than assumed, so other ISAPI models work to the extent their firmware
+exposes the same surfaces. Reports from other models are welcome.
+
+## What this fork changes
+
+| | |
+|---|---|
+| **Recordings in the right time zone** | Hikvision search and playback times are the recorder's own clock time, even with a trailing `Z`. 1.0.0 read them as UTC, so outside UTC every recording was hours out. Home Assistant's time zone is used, or set *Recorder time zone*. |
+| **Works on Home Assistant 2026.10+** | 1.0.0's camera devices used the `via_device` form 2026.10 refuses, which took every camera down. |
+| **Person / vehicle detections** | The recorder's own smart search (AcuSense), with thumbnails, kept in a small index so a day is searched once. Recorders without it are noticed and left alone. |
+| **PTZ tap-to-aim and presets** | `ptz_aim` points the camera at a spot in its picture or zooms in to a box; `ptz_presets` lists named presets and never offers the command numbers (94 is *Remote reboot*). |
+| **Smoother replays on iPhone / iPad** | One playback stream per viewer: a clip you leave is stopped at once instead of idling and competing with the next. |
+| **Events are opt-in** | The alert stream is one long-lived connection to the recorder; it only opens when you choose events. |
+| **No sidebar panel, no injected script** | The card is a dashboard resource. The injected copy never registered in Firefox. |
 
 <p align="center">
   <img src="docs/images/card-live.png" alt="The card in live view: one channel large, the rest as a strip below" width="480">
@@ -32,32 +53,28 @@ ISAPI models work to the extent their firmware exposes the same surfaces.
 | **Events** | Motion, line crossing, intrusion, tamper, video loss, face detection and more — pushed over ISAPI's alert stream, not polled. The integration asks the NVR which events each channel actually supports and creates exactly those, so nothing dead appears and nothing real is missed. |
 | **NVR health** | Uptime, CPU, memory, per-disk usage, free space and health, online channel count, plus disk / network / illegal-login / recording-failure sensors. |
 | **Camera health** | A connectivity sensor per channel, from the NVR's own per-channel probe — truer than an ICMP ping, and it works even when the cameras sit on the NVR's PoE subnet. |
-| **Sidebar panel** | A **Cameras** page with the whole system in it, and an **Add NVR** button — IP, username and password, all from the GUI. |
 | **REST API** | `/api/hikvision_nvr/…` for third-party mobile apps, using ordinary Home Assistant tokens. |
-| **Services** | Search recordings, export a clip to MP4, PTZ, reboot. |
+| **Detections** | Person and vehicle detections per channel and day, with thumbnails, for timelines (`/api/hikvision_nvr/{device}/{channel}/detections`). |
+| **Services** | Search recordings, export a clip to MP4, PTZ move / aim / presets, enable notifications, reboot. |
 
 ## Install
 
 ### HACS (recommended)
 
-1. HACS → ⋮ → **Custom repositories** → add this repository, category **Integration**.
-2. Install **Hikvision NVR**, then restart Home Assistant.
-3. Restart, then either click **Cameras** in the sidebar → **Add NVR**, or go to
-   **Settings → Devices & Services → Add Integration → Hikvision NVR**.
+1. HACS → ⋮ → **Custom repositories** → add `https://github.com/deekay2153/hikvision-nvr-wall`,
+   category **Integration**. (Using the original? Remove it first: same domain.)
+2. Install **Hikvision NVR Wall**, then restart Home Assistant.
+3. **Settings → Devices & Services → Add Integration → Hikvision NVR**.
 
 ### Manual
 
 Copy `custom_components/hikvision_nvr/` into your `config/custom_components/`
 directory and restart Home Assistant.
 
-### The card and the sidebar
+### The card
 
-Nothing to do. The integration ships its own frontend and registers it on
-startup, so after installing you get:
-
-- a **Cameras** entry in the sidebar — the full-page view, with an **Add NVR**
-  button that opens the setup dialog right there;
-- the card available on any dashboard, with no Lovelace resource to add:
+Nothing to do. The integration ships its own card and adds it to the dashboard
+resources on startup, so it is available on any dashboard:
 
 Add it from **Add card → Hikvision** and pick everything from dropdowns — the
 NVR, which cameras to show, whether it opens on live or history, live quality
@@ -110,6 +127,12 @@ not locked out from earlier failed logins.
   people want.
 - **Live view stream** — main (full resolution) or sub (light, starts faster).
 - **Snapshot stream** — sub stream keeps thumbnails cheap on large systems.
+- **Recorder time zone** — leave empty when the recorder's clock is set to the
+  same time zone as Home Assistant; otherwise its IANA name, e.g. `Europe/London`.
+
+Nothing is ticked under **Events to expose** at first: playback, the timeline
+and its person / vehicle markers need no events, and each event sensor keeps a
+connection to the recorder open.
 
 ## Documentation
 
@@ -125,7 +148,15 @@ the recording or sub-stream codec to **H.264** on the NVR for universal
 playback, or put go2rtc in front to transcode. `export_recording` produces a
 plain MP4 that plays everywhere either way.
 
+**H.265+ (Hikvision "SmartCodec") freezes live video in Firefox** a few seconds
+in, while Chrome, Edge and Safari carry on. If a camera's live picture freezes
+in Firefox only, turn **H.265+** off for that camera's stream on the recorder
+(plain H.265 is fine). It costs some disk: SmartCodec saves roughly 30-50 %.
+
 ## Motion sensors staying off
+
+First, choose the events you want under **Configure → Events to expose**: none
+are chosen at first.
 
 A Hikvision trigger can record, notify, both, or neither — and "record only" is
 a common factory default. A channel set that way fills the disk with motion
@@ -170,7 +201,8 @@ checks CI runs and the one structural rule (`isapi.py` never imports Home
 Assistant). Report anything exploitable through
 [SECURITY.md](SECURITY.md) rather than a public issue.
 
-This project is not affiliated with or endorsed by Hikvision.
+This project is not affiliated with or endorsed by Hikvision. Thanks to
+[techmarkai](https://github.com/techmarkai) for the original integration.
 
 ## Licence
 

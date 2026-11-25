@@ -24,7 +24,8 @@ custom_components/hikvision_nvr/
   api.py            The REST API and the HLS stream cache.
   services.py       search_recordings, export_recording, ptz, reboot.
   diagnostics.py    Redacted dump for bug reports.
-  frontend.py       Static path, auto-loaded card, sidebar panel.
+  frontend.py       Static path and the card's dashboard resource.
+  detections.py     Person / vehicle detections, their index and thumbnails.
   frontend/         The card and the panel, shipped with the integration.
 tests/live_check.py         End-to-end check against a real NVR.
 ```
@@ -225,13 +226,13 @@ does not get 160 dead entities.
 `EVENT_AUTO_OFF` (15 s) exists because some firmwares repeat `active` and never
 send `inactive`.
 
-### The card and panel
-Both ship inside the integration and are served from `/hikvision_nvr_frontend`.
-`add_extra_js_url` loads the card on every dashboard, so there is no Lovelace
-resource to register; `async_register_built_in_panel` adds the **Cameras**
-sidebar entry, whose *Add NVR* button deep-links to the config-flow dialog. The
-card guards its `customElements.define` because the panel imports it under a
-second URL.
+### The card
+The card ships inside the integration, is served from `/hikvision_nvr_frontend`
+and is added to the dashboard resources on start (and its URL brought up to the
+installed version), so there is nothing to register by hand. The fork dropped
+1.0.0's `add_extra_js_url` injection -- it ran before Firefox's custom element
+support was ready and the card never registered -- and the **Cameras** sidebar
+panel; `hikvision-nvr-panel.js` is still shipped but not registered.
 
 The card uses Home Assistant's own `<ha-hls-player>` — obtained by forcing the frontend's
 camera chunk to load — so there is no bundled `hls.js` and no build step. Falls

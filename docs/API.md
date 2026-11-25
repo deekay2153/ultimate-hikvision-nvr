@@ -249,6 +249,8 @@ Plays back a time range from the NVR's disks over HLS.
 |---|---|---|
 | `start`, `end` | yes | Max span **6 hours**. |
 | `hls` | no | `1` to also start an HLS stream and return `hls_url`. Off by default: HLS goes through Home Assistant's stream worker, which crashes on recordings carrying a G.722.1 audio track. |
+| `client` | no | Any id for the viewer (one per page). With `hls=1`, the HLS stream this viewer had open before is stopped now instead of idling for minutes; on iPhone / iPad that overlap made the next clip stutter. |
+| `stop` | no | `1` with `client`: stop that viewer's playback stream and return `{"stopped": true}`. Call it when the viewer leaves history. |
 
 ```json
 {
@@ -323,6 +325,31 @@ to a player. Max 2 hours.
 ```
 
 ---
+
+### `GET /api/hikvision_nvr/{device_id}/{channel}/detections`
+
+Person and vehicle detections from the recorder's smart search (AcuSense), for
+drawing on a timeline. `start` / `end` as above; a range within one local day is
+answered from a kept index (only the minutes since it was last brought up to
+date are asked of the recorder).
+
+```json
+{
+  "channel": 2, "start": "…", "end": "…", "truncated": false, "supported": true,
+  "detections": [
+    {"time": "2026-11-24T12:00:43+00:00", "kind": "vehicle", "picture": "201/ch02_…/52341"}
+  ]
+}
+```
+
+`supported: false` with an empty list means the recorder has no such search
+(no AcuSense, or older firmware); it is not asked again for six hours.
+`picture` is a reference for the two picture endpoints:
+
+- `GET …/{channel}/detection_picture/{track}/{name}/{size}.jpg` — the
+  recorder's full-size still.
+- `GET …/{channel}/detection_thumb/{track}/{name}/{size}.jpg` — a 320 px copy,
+  made once and kept for 7 days.
 
 ### `GET /api/hikvision_nvr/{device_id}/events`
 
@@ -402,6 +429,26 @@ Max range 2 hours. `filename` must be a bare file name — paths are rejected.
 action: hikvision_nvr.ptz
 data: { channel: 2, pan: 30, duration: 1.5 }   # or: { channel: 2, preset: 1 }
 ```
+
+### `hikvision_nvr.ptz_aim`
+
+Points a PTZ camera at a spot in its picture (Hikvision 3D positioning), or
+zooms in to a box. `x` / `y` are percent from the left / top edge; `x2` / `y2`
+are the box's bottom-right corner.
+
+```yaml
+action: hikvision_nvr.ptz_aim
+data: { channel: 1, x: 70, y: 40 }                  # look there
+# data: { channel: 1, x: 40, y: 30, x2: 60, y2: 50 }   # zoom in to that box
+```
+
+### `hikvision_nvr.ptz_presets` → returns a response
+
+The presets someone has named, as `{"presets": [{"id": 3, "name": "Driveway"}]}`.
+A Hikvision PTZ reports every slot as enabled with a default name ("Preset 17"),
+so unnamed slots are left out; so are the numbers it treats as commands (33-46,
+50, 92-105: patrols, scans, limits, and 94, *Remote reboot*). Name a preset in
+the camera's web page to have it listed.
 
 ### `hikvision_nvr.reboot`
 
