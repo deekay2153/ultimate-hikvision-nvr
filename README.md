@@ -6,7 +6,12 @@
 [![Release](https://img.shields.io/github/v/release/deekay2153/ultimate-hikvision-nvr?sort=semver)](https://github.com/deekay2153/ultimate-hikvision-nvr/releases)
 [![HACS: custom](https://img.shields.io/badge/HACS-custom-41BDF5.svg)](https://hacs.xyz/)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.2%2B-41BDF5.svg)](https://www.home-assistant.io/)
+[![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/deekay2153)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-black.svg)](LICENSE)
+
+![Ultimate Hikvision NVR card: a camera wall with live tiles, a 24-hour bar of people and vehicles, and a detections list](https://raw.githubusercontent.com/deekay2153/ultimate-hikvision-nvr-card/main/docs/wall.jpg)
+
+<sub>Shown with the [Ultimate Hikvision NVR card](https://github.com/deekay2153/ultimate-hikvision-nvr-card), camera pictures blurred with its screenshot mode.</sub>
 
 Live view, recorded-history playback with **person and vehicle markers**, PTZ
 with tap-to-aim, motion events and a full REST API for a Hikvision NVR/DVR — as
@@ -203,6 +208,10 @@ Assistant). Report anything exploitable through
 
 This project is not affiliated with or endorsed by Hikvision. Thanks to
 [techmarkai](https://github.com/techmarkai) for the original integration.
+
+## Support
+
+If this saves you a trip to the recorder's own app, you can [buy me a coffee](https://www.buymeacoffee.com/deekay2153). Thank you!
 
 ## Licence
 
