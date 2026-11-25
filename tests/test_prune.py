@@ -18,7 +18,9 @@ import asyncio
 from datetime import date, timedelta
 from pathlib import Path
 
-SOURCE = Path(__file__).resolve().parents[1] / "custom_components" / "hikvision_nvr" / "detections.py"
+SOURCE = (
+    Path(__file__).resolve().parents[1] / "custom_components" / "hikvision_nvr" / "detections.py"
+)
 TODAY = date(2026, 11, 25)
 
 
@@ -40,7 +42,9 @@ class _Hass:
 
 def _function():
     tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
-    node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_forget_old_days")
+    node = next(
+        n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_forget_old_days"
+    )
     scope = {"INDEX_KEY": "index", "dt_util": _DtUtil, "timedelta": timedelta}
     exec(compile(ast.Module(body=[node], type_ignores=[]), str(SOURCE), "exec"), scope)
     return scope["_forget_old_days"]
