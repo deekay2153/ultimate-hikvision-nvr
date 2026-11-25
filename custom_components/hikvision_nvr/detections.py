@@ -38,7 +38,7 @@ from homeassistant.util import dt as dt_util
 from .api import _BaseView, _get_channel, _get_coordinator, _handle_errors, _time_range
 from .const import DOMAIN
 from .coordinator import async_coordinators
-from .isapi import HikvisionError, UnsupportedOperation, local_timezone
+from .isapi import AuthError, HikvisionError, UnsupportedOperation
 
 
 class DetectionsUnsupported(Exception):
@@ -50,7 +50,6 @@ KINDS = {"peopleDetection": "person", "vehicleMatchResult": "vehicle"}
 PAGE = 50
 MAX_PAGES = 40
 SEARCH_PATH = "/ISAPI/ContentMgmt/eventRecordSearch?format=json"
-AMP = chr(38)
 SAFE_NAME = re.compile(r"^[A-Za-z0-9_]{8,120}$")
 TRACK_IN_PATH = re.compile(r"/tracks/(\d{3,5})/?$")
 
@@ -68,18 +67,14 @@ VISIT_GAP = 60
 
 INDEX_KEY = f"{DOMAIN}_detection_index"
 INDEX_CHUNK = timedelta(hours=3)
+MIN_CHUNK = timedelta(minutes=10)
 INDEX_OVERLAP = timedelta(minutes=3)
 INDEX_FRESH_SECONDS = 45
 
 
-def _later(when, delta):
-    """when plus delta."""
-    return when - (delta * -1)
-
-
-def _stamp(value) -> str:
+def _stamp(value, zone) -> str:
     """The recorder's local time with its real offset, which this search expects."""
-    return dt_util.as_utc(value).astimezone(local_timezone()).isoformat(timespec="seconds")
+    return dt_util.as_utc(value).astimezone(zone).isoformat(timespec="seconds")
 
 
 def _unsupported(hass, coordinator) -> bool:
@@ -135,7 +130,10 @@ async def _search(coordinator, channel_id: int, start, end):
                     "searchResultPosition": position,
                     "maxResults": PAGE,
                     "timeSpanList": [
-                        {"startTime": _stamp(start), "endTime": _stamp(end)}
+                        {
+                            "startTime": _stamp(start, coordinator.api.local_tz),
+                            "endTime": _stamp(end, coordinator.api.local_tz),
+                        }
                     ],
                     "type": "all",
                     "channels": [channel_id],
@@ -146,7 +144,9 @@ async def _search(coordinator, channel_id: int, start, end):
         try:
             response = await coordinator.api.request("POST", SEARCH_PATH, data=body)
             result = json.loads(await response.text()).get("EventSearchResult", {})
-        except UnsupportedOperation as err:
+        except (UnsupportedOperation, AuthError) as err:
+            # Not offered, or not allowed for this account (an Operator may be
+            # refused the smart search): either way, no markers from here.
             raise DetectionsUnsupported(str(err)) from err
         except HikvisionError as err:
             # The recorder refused the request itself (not a timeout or a
@@ -173,7 +173,7 @@ async def _search(coordinator, channel_id: int, start, end):
                     "picture": _picture_ref(item.get("pictureUrl")),
                 }
             )
-        position = sum((position, len(targets)))
+        position += len(targets)
         if not targets or result.get("responseStatusStrg") != "MORE":
             break
     else:
@@ -190,14 +190,14 @@ def _media_dir(hass) -> Path:
     return media / DOMAIN
 
 
-def _index_path(hass, channel_id: int, day) -> Path:
-    return _media_dir(hass) / "index" / f"{channel_id}_{day.isoformat()}.json"
+def _index_path(hass, coordinator, channel_id: int, day) -> Path:
+    return _media_dir(hass) / "index" / coordinator.slug / f"{channel_id}_{day.isoformat()}.json"
 
 
 def _day_bounds(day):
     """Local midnight to the next local midnight."""
     start = dt_util.start_of_local_day(day)
-    end = dt_util.start_of_local_day(_later(day, timedelta(days=1)))
+    end = dt_util.start_of_local_day(day + timedelta(days=1))
     return dt_util.as_utc(start), dt_util.as_utc(end)
 
 
@@ -214,7 +214,7 @@ def _load_index(path: Path):
 def _save_index(path: Path, payload: dict) -> None:
     """Runs in the executor."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    partial = path.with_suffix(".part")
+    partial = path.with_suffix(f".{uuid.uuid4().hex}.part")
     partial.write_text(json.dumps(payload))
     partial.replace(path)
 
@@ -226,14 +226,14 @@ async def _day_detections(hass, coordinator, channel_id: int, day, max_age=INDEX
     the NVR, in chunks, and never anything for a day that is already complete.
     """
     store = hass.data.setdefault(INDEX_KEY, {})
-    key = (channel_id, day.isoformat())
+    key = (coordinator.slug, channel_id, day.isoformat())
     entry = store.get(key)
     if entry is None:
         entry = {"items": [], "until": None, "loaded": False, "lock": asyncio.Lock()}
         store[key] = entry
     async with entry["lock"]:
         start, end = _day_bounds(day)
-        path = _index_path(hass, channel_id, day)
+        path = _index_path(hass, coordinator, channel_id, day)
         if not entry["loaded"]:
             saved = await hass.async_add_executor_job(_load_index, path)
             if saved:
@@ -253,9 +253,15 @@ async def _day_detections(hass, coordinator, channel_id: int, day, max_age=INDEX
         seen = {(i["time"], i["kind"], i["picture"]) for i in entry["items"]}
         changed = False
         try:
+            chunk = INDEX_CHUNK
             while cursor < stop:
-                chunk_end = min(stop, _later(cursor, INDEX_CHUNK))
-                found, _ = await _search(coordinator, channel_id, cursor, chunk_end)
+                chunk_end = min(stop, cursor + chunk)
+                found, truncated = await _search(coordinator, channel_id, cursor, chunk_end)
+                if truncated and chunk > MIN_CHUNK:
+                    # More results than one search returns: a busy stretch.
+                    # Ask again for half as long rather than keep a gap.
+                    chunk = chunk / 2
+                    continue
                 for item in found:
                     ident = (item["time"], item["kind"], item["picture"])
                     if ident in seen:
@@ -265,6 +271,7 @@ async def _day_detections(hass, coordinator, channel_id: int, day, max_age=INDEX
                     changed = True
                 entry["until"] = chunk_end
                 cursor = chunk_end
+                chunk = INDEX_CHUNK
         finally:
             if changed:
                 entry["items"].sort(key=lambda i: i["time"])
@@ -274,7 +281,7 @@ async def _day_detections(hass, coordinator, channel_id: int, day, max_age=INDEX
                 try:
                     await hass.async_add_executor_job(_save_index, path, payload)
                 except OSError as err:
-                    _LOGGER.debug(f"Detection list not saved ({path.name}): {err!r}")
+                    _LOGGER.debug("Detection list not saved (%s): %r", path.name, err)
         return entry["items"]
 
 
@@ -290,12 +297,13 @@ def _forget_old_days(hass) -> None:
 # ------------------------------------------------------------- thumbnails
 
 
-def _thumb_dir(hass) -> Path:
-    return _media_dir(hass) / "thumbs"
+def _thumb_dir(hass, coordinator=None) -> Path:
+    base = _media_dir(hass) / "thumbs"
+    return base if coordinator is None else base / coordinator.slug
 
 
-def _thumb_path(hass, track: str, name: str) -> Path:
-    return _thumb_dir(hass) / f"{track}_{name}.jpg"
+def _thumb_path(hass, coordinator, track: str, name: str) -> Path:
+    return _thumb_dir(hass, coordinator) / f"{track}_{name}.jpg"
 
 
 def _make_thumb(data: bytes, target: Path) -> bytes:
@@ -309,7 +317,7 @@ def _make_thumb(data: bytes, target: Path) -> bytes:
     image.save(out, "JPEG", quality=72)
     small = out.getvalue()
     target.parent.mkdir(parents=True, exist_ok=True)
-    partial = target.with_suffix(".part")
+    partial = target.with_suffix(f".{uuid.uuid4().hex}.part")
     partial.write_bytes(small)
     partial.replace(target)
     return small
@@ -343,11 +351,11 @@ def _prune(folder: Path, pattern: str, keep_seconds: int) -> int:
 
 
 async def _thumb(hass, coordinator, track: str, name: str, size: str) -> bytes:
-    target = _thumb_path(hass, track, name)
+    target = _thumb_path(hass, coordinator, track, name)
     cached = await hass.async_add_executor_job(_read_if_present, target)
     if cached is not None:
         return cached
-    path = f"/picture/Streaming/tracks/{track}/?name={name}{AMP}size={size}"
+    path = f"/picture/Streaming/tracks/{track}/?name={name}&size={size}"
     data = await coordinator.api.get_bytes(path)
     return await hass.async_add_executor_job(_make_thumb, data, target)
 
@@ -367,8 +375,10 @@ def async_start_prefetch(hass) -> None:
         try:
             today = dt_util.now().date()
             days = (today, today - timedelta(days=1))
-            have = await hass.async_add_executor_job(_list_names, _thumb_dir(hass))
             for coordinator in async_coordinators(hass).values():
+                have = await hass.async_add_executor_job(
+                    _list_names, _thumb_dir(hass, coordinator)
+                )
                 for day in days:
                     if _unsupported(hass, coordinator):
                         break
@@ -383,7 +393,9 @@ def async_start_prefetch(hass) -> None:
                             _mark(hass, coordinator, False)
                             break
                         except Exception as err:
-                            _LOGGER.debug(f"Detection pass: search failed ch {channel_id}: {err!r}")
+                            _LOGGER.debug(
+                                "Detection pass: search failed ch %s: %r", channel_id, err
+                            )
                             continue
                         last = {}
                         for item in list(found):
@@ -405,21 +417,21 @@ def async_start_prefetch(hass) -> None:
                                 await _thumb(hass, coordinator, track, name, size)
                                 made.append(ref)
                             except Exception as err:
-                                _LOGGER.debug(f"Detection pass: fetch failed {ref}: {err!r}")
+                                _LOGGER.debug("Detection pass: fetch failed %s: %r", ref, err)
                             await asyncio.sleep(0.1)
             _forget_old_days(hass)
             if time.time() - state["pruned"] > 86400:
                 state["pruned"] = time.time()
                 await hass.async_add_executor_job(
-                    _prune, _thumb_dir(hass), "*.jpg", THUMB_KEEP_SECONDS
+                    _prune, _thumb_dir(hass), "**/*.jpg", THUMB_KEEP_SECONDS
                 )
                 await hass.async_add_executor_job(
                     _prune, _media_dir(hass) / "index", "*.json", INDEX_KEEP_SECONDS
                 )
             if made:
-                _LOGGER.debug(f"Detection pass: made {len(made)} thumbnails")
+                _LOGGER.debug("Detection pass: made %s thumbnails", len(made))
         except Exception as err:
-            _LOGGER.warning(f"Detection pass failed: {err!r}")
+            _LOGGER.warning("Detection pass failed: %r", err)
         finally:
             state["busy"] = False
         if len(made) >= PREFETCH_MAX:
@@ -439,7 +451,11 @@ def async_start_prefetch(hass) -> None:
 
 
 class DetectionsView(_BaseView):
-    """GET /api/hikvision_nvr/{device_id}/{channel}/detections (start, end)."""
+    """GET /api/hikvision_nvr/{device_id}/{channel}/detections (start, end).
+
+    The first request starts the background pass that keeps today's lists and
+    thumbnails ready, so installs that never use detections never search.
+    """
 
     url = "/api/hikvision_nvr/{device_id}/{channel}/detections"
     name = "api:hikvision_nvr:detections"
@@ -447,6 +463,7 @@ class DetectionsView(_BaseView):
     @_handle_errors
     async def get(self, request, device_id, channel):
         hass = request.app["hass"]
+        async_start_prefetch(hass)
         coordinator = _get_coordinator(hass, device_id)
         chan = _get_channel(coordinator, channel)
         start, end = _time_range(request)
@@ -487,7 +504,7 @@ class DetectionsView(_BaseView):
                 }
             )
         except Exception as err:
-            _LOGGER.warning(f"Detection search failed for channel {chan.id}: {err!r}")
+            _LOGGER.warning("Detection search failed for channel %s: %r", chan.id, err)
             raise
         return self.json(
             {
@@ -520,11 +537,11 @@ class DetectionPictureView(_BaseView):
         _get_channel(coordinator, channel)
         if not _valid_ref(track, name, size):
             raise web.HTTPBadRequest(reason="bad picture reference")
-        path = f"/picture/Streaming/tracks/{track}/?name={name}{AMP}size={size}"
+        path = f"/picture/Streaming/tracks/{track}/?name={name}&size={size}"
         try:
             data = await coordinator.api.get_bytes(path)
         except Exception as err:
-            _LOGGER.warning(f"Detection picture failed ({track}): {err!r}")
+            _LOGGER.warning("Detection picture failed (%s): %r", track, err)
             raise
         return web.Response(
             body=data,
@@ -556,7 +573,7 @@ class DetectionThumbView(_BaseView):
         try:
             data = await _thumb(hass, coordinator, track, name, size)
         except Exception as err:
-            _LOGGER.warning(f"Detection thumbnail failed ({track}): {err!r}")
+            _LOGGER.warning("Detection thumbnail failed (%s): %r", track, err)
             raise
         return web.Response(
             body=data,

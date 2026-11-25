@@ -29,7 +29,7 @@ exposes the same surfaces. Reports from other models are welcome.
 | | |
 |---|---|
 | **Recordings in the right time zone** | Hikvision search and playback times are the recorder's own clock time, even with a trailing `Z`. 1.0.0 read them as UTC, so outside UTC every recording was hours out. Home Assistant's time zone is used, or set *Recorder time zone*. |
-| **Works on Home Assistant 2026.10+** | 1.0.0's camera devices used the `via_device` form 2026.10 refuses, which took every camera down. |
+| **Works on Home Assistant 2026.10+** | On 2026.10 the original's camera entities failed to load (its open issue #2); the fork drops the `via_device` link that triggered it, so cameras are no longer grouped under the recorder. |
 | **Person / vehicle detections** | The recorder's own smart search (AcuSense), with thumbnails, kept in a small index so a day is searched once. Recorders without it are noticed and left alone. |
 | **PTZ tap-to-aim and presets** | `ptz_aim` points the camera at a spot in its picture or zooms in to a box; `ptz_presets` lists named presets and never offers the command numbers (94 is *Remote reboot*). |
 | **Smoother replays on iPhone / iPad** | One playback stream per viewer: a clip you leave is stopped at once instead of idling and competing with the next. |

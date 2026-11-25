@@ -41,7 +41,6 @@ from .isapi import (
     ConnectionFailed,
     HikvisionError,
     HikvisionISAPI,
-    set_local_timezone,
 )
 from .services import async_setup_services
 
@@ -83,19 +82,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: HikvisionConfigEntry) ->
 
     # Recordings are searched and replayed in the recorder's own local time.
     zone = dt_util.get_time_zone(entry.options.get(CONF_TIMEZONE) or "")
-    set_local_timezone(zone or dt_util.get_default_time_zone())
+    api.local_tz = zone or dt_util.get_default_time_zone()
 
     coordinator = HikvisionCoordinator(hass, entry, api)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
     # The NVR's event stream is one long-lived connection per client. Only
     # open it when someone has chosen events to watch.
-    if entry.options.get(CONF_EVENTS):
+    if _events_wanted(entry):
         coordinator.start_event_listener()
 
-    # Register the NVR itself before the platforms register cameras that point
-    # at it with via_device -- HA warns (and from 2025.12 will fail) if a
-    # via_device target does not exist yet.
+    # Register the NVR itself before the platforms add their cameras. (The
+    # cameras no longer name it as via_device; see entity.py.)
     info = api.device_info
     dr.async_get(hass).async_get_or_create(
         config_entry_id=entry.entry_id,
@@ -112,12 +110,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: HikvisionConfigEntry) ->
     )
 
     _async_remove_obsolete_entities(hass, entry, coordinator)
-    if entry.options.get(CONF_EVENTS):
+    if _events_wanted(entry):
         await _async_check_notifications(hass, entry, api)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_reload_on_options))
     return True
+
+
+def _events_wanted(entry: HikvisionConfigEntry) -> bool:
+    """Whether to open the recorder's event stream.
+
+    New entries start with no events chosen. An entry carried over from the
+    original integration that never had its options saved has no `events` key
+    at all, which there meant "every event": keep listening for those, or
+    their motion sensors would exist and never fire.
+    """
+    chosen = entry.options.get(CONF_EVENTS)
+    return chosen is None or bool(chosen)
 
 
 async def _async_check_notifications(

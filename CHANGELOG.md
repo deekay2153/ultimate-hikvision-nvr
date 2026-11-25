@@ -15,8 +15,9 @@ A fork of [techmarkai/hikvision-nvr-ha](https://github.com/techmarkai/hikvision-
   are the recorder's own clock time, even with a trailing `Z`; 1.0.0 read them
   as UTC, so every recording was hours out outside UTC. Home Assistant's time
   zone is used, or set the new *Recorder time zone* option.
-- **Works on Home Assistant 2026.10+.** The camera devices no longer use the
-  `via_device` form 2026.10 refuses, which took every camera down.
+- **Works on Home Assistant 2026.10+.** The original's camera entities failed
+  to load on 2026.10 (its open issue #2); the fork drops the `via_device`
+  link that triggered it. Cameras are no longer grouped under the recorder.
 - **Person / vehicle detections** for the timeline: the recorder's own smart
   search, with thumbnails, kept in a small index so a day is searched once
   (`/api/hikvision_nvr/{device}/{channel}/detections`, `.../picture`,
@@ -38,6 +39,14 @@ A fork of [techmarkai/hikvision-nvr-ha](https://github.com/techmarkai/hikvision-
   `hikvision_nvr.ptz_presets` returns the presets someone has named. Unnamed
   slots are left out (the camera reports all of them as in use), and so are
   the numbers Hikvision uses as commands -- 94 is *Remote reboot*.
+- **Several recorders, several time zones.** Each recorder keeps its own time
+  zone, detection lists and thumbnails.
+- **Upgrading from the original keeps motion sensors working.** An entry that
+  never saved its options still listens for events, as before.
+- **Busy days are not cut short.** When one search returns its maximum, the
+  stretch is asked again in halves instead of being stored with a gap.
+- The background detection pass starts with the first detections request, so
+  installs that never use the timeline never search.
 - The recorder device no longer carries its MAC address, which made Home
   Assistant merge it into other Hikvision integrations' devices.
 

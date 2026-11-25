@@ -204,23 +204,11 @@ def _text(element: ET.Element | None, path: str, default: str = "") -> str:
 
 # Hikvision search and playback times are the recorder's own wall-clock time,
 # even when written with a trailing Z. Reading them as UTC put every recording
-# hours out anywhere but UTC. The integration sets this to the recorder's time
-# zone at start-up (Home Assistant's, unless the options say otherwise).
-_local_tz: tzinfo = UTC
+# hours out anywhere but UTC. Each HikvisionISAPI carries its recorder's zone
+# (`local_tz`, set by the integration at start-up) and passes it in here.
 
 
-def set_local_timezone(zone: tzinfo) -> None:
-    """Tell the parser which time zone the recorder's clock is in."""
-    global _local_tz
-    _local_tz = zone
-
-
-def local_timezone() -> tzinfo:
-    """The recorder's time zone, as set at start-up."""
-    return _local_tz
-
-
-def _parse_time(value: str) -> datetime:
+def _parse_time(value: str, zone: tzinfo = UTC) -> datetime:
     """Parse the several timestamp shapes Hikvision emits (recorder-local time)."""
     value = value.strip()
     if not value:
@@ -228,21 +216,21 @@ def _parse_time(value: str) -> datetime:
     # Compact form used inside playback URIs: 20260810T000024Z
     if "-" not in value and len(value) >= 16:
         return datetime.strptime(value[:16], "%Y%m%dT%H%M%SZ").replace(
-            tzinfo=_local_tz
+            tzinfo=zone
         ).astimezone(UTC)
     # ISO with or without offset. A trailing Z is not UTC here (see above); a
     # real offset such as +10:00 is kept.
     parsed = datetime.fromisoformat(value.removesuffix("Z"))
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=_local_tz)
+        parsed = parsed.replace(tzinfo=zone)
     return parsed.astimezone(UTC)
 
 
-def to_isapi_time(value: datetime) -> str:
+def to_isapi_time(value: datetime, zone: tzinfo = UTC) -> str:
     """Render a datetime the way the search API expects (recorder-local time)."""
     if value.tzinfo is None:
         value = value.replace(tzinfo=UTC)
-    return value.astimezone(_local_tz).strftime(_TIME_FMT)
+    return value.astimezone(zone).strftime(_TIME_FMT)
 
 
 class _Digest:
@@ -290,6 +278,9 @@ class _Digest:
 
 class HikvisionISAPI:
     """Talks ISAPI to one NVR."""
+
+    # The recorder's own clock time zone; see _parse_time.
+    local_tz: tzinfo = UTC
 
     def __init__(
         self,
@@ -641,8 +632,8 @@ class HikvisionISAPI:
     ) -> str:
         """RTSP URL that replays a time range from the NVR's disks."""
         fmt = "%Y%m%dT%H%M%SZ"
-        start_s = start.astimezone(_local_tz).strftime(fmt)
-        end_s = end.astimezone(_local_tz).strftime(fmt)
+        start_s = start.astimezone(self.local_tz).strftime(fmt)
+        end_s = end.astimezone(self.local_tz).strftime(fmt)
         return (
             f"{self._rtsp_root(credentials)}"
             f"/Streaming/tracks/{channel * 100 + 1}"
@@ -705,8 +696,8 @@ class HikvisionISAPI:
                 f"<searchID>{search_id}</searchID>"
                 f"<trackIDList><trackID>{channel * 100 + 1}</trackID></trackIDList>"
                 "<timeSpanList><timeSpan>"
-                f"<startTime>{to_isapi_time(start)}</startTime>"
-                f"<endTime>{to_isapi_time(end)}</endTime>"
+                f"<startTime>{to_isapi_time(start, self.local_tz)}</startTime>"
+                f"<endTime>{to_isapi_time(end, self.local_tz)}</endTime>"
                 "</timeSpan></timeSpanList>"
                 f"<maxResults>{min(40, max_results - len(found))}</maxResults>"
                 f"<searchResultPostion>{position}</searchResultPostion>"
@@ -725,8 +716,8 @@ class HikvisionISAPI:
                 try:
                     recording = Recording(
                         channel=channel,
-                        start=_parse_time(_text(item, "timeSpan/startTime")),
-                        end=_parse_time(_text(item, "timeSpan/endTime")),
+                        start=_parse_time(_text(item, "timeSpan/startTime"), self.local_tz),
+                        end=_parse_time(_text(item, "timeSpan/endTime"), self.local_tz),
                         playback_uri=_text(
                             item, "mediaSegmentDescriptor/playbackURI"
                         ),
@@ -860,7 +851,7 @@ class HikvisionISAPI:
             return None
         channel_raw = _text(root, "channelID") or _text(root, "dynChannelID")
         try:
-            timestamp = _parse_time(_text(root, "dateTime"))
+            timestamp = _parse_time(_text(root, "dateTime"), self.local_tz)
         except ValueError:
             timestamp = datetime.now(UTC)
         disk = _text(root, "diskNo")

@@ -436,7 +436,7 @@ class PlaybackView(_BaseView):
         hass = request.app["hass"]
         coordinator = _get_coordinator(hass, device_id)
         chan = _get_channel(coordinator, channel)
-        # PATCHED 18 Nov: stop=1 ends this viewer's playback stream at once.
+        # stop=1 ends this viewer's playback stream at once (see client= below).
         if request.query.get("stop") in ("1", "true", "yes"):
             clients = hass.data.setdefault("hikvision_nvr_pb_clients", {})
             previous = clients.pop(request.query.get("client", ""), None)
@@ -477,8 +477,9 @@ class PlaybackView(_BaseView):
                 f"pb-{coordinator.slug}-{chan.id}"
                 f"-{start.timestamp()}-{end.timestamp()}"
             )
-            # PATCHED 18 Nov: one playback stream per viewer (client=<page id>).
-            # The clip that viewer was on is stopped now, not left to idle.
+            # One playback stream per viewer (client=<page id>): the clip that
+            # viewer was on is stopped now instead of idling for minutes, which
+            # made the next clip stutter on iPhone / iPad.
             client = request.query.get("client")
             if client:
                 clients = hass.data.setdefault("hikvision_nvr_pb_clients", {})
@@ -919,15 +920,10 @@ def async_register_api(hass: HomeAssistant) -> None:
     hass.data[f"{DOMAIN}_api_registered"] = True
     for view in _VIEWS:
         hass.http.register_view(view)
-    # PATCHED: person / vehicle markers for the timeline (see detections.py).
-    from .detections import (
-        DetectionPictureView,
-        DetectionsView,
-        DetectionThumbView,
-        async_start_prefetch,
-    )
+    # Person / vehicle detections (detections.py). Imported here, not at the
+    # top: detections.py builds on this module's views and helpers.
+    from .detections import DetectionPictureView, DetectionsView, DetectionThumbView
 
     hass.http.register_view(DetectionsView())
     hass.http.register_view(DetectionPictureView())
     hass.http.register_view(DetectionThumbView())
-    async_start_prefetch(hass)

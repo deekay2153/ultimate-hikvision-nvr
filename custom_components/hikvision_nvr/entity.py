@@ -36,8 +36,10 @@ class HikvisionEntity(CoordinatorEntity[HikvisionCoordinator]):
                 name=channel.name,
                 manufacturer="Hikvision",
                 model=f"{info.get('model', 'NVR')} channel {channel.id}",
-                # No via_device: Home Assistant 2026.9 deprecated the tuple form and
-                # 2026.10 refuses it, which took every camera down.
+                # No via_device: with it, camera entities failed to load on Home
+                # Assistant 2026.10 (upstream issue #2, and seen on the author's
+                # install). The cost is that cameras are not grouped under the
+                # recorder in the device page.
                 configuration_url=(
                     f"http://{channel.ip_address}" if channel.ip_address else None
                 ),
