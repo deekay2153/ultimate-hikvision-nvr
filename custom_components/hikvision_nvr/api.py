@@ -11,6 +11,7 @@ See docs/API.md for the full contract.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from datetime import datetime, timedelta
 from typing import Any
@@ -783,75 +784,101 @@ async def _async_send_range(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        errors: list[str] = []
+        run = {"process": process, "errors": [], "stopped": False}
 
         async def drain_errors() -> None:
-            # Kept short and read continuously, so a chatty ffmpeg never fills
-            # the pipe and stalls.
-            while line := await process.stderr.readline():
-                errors[:] = [*errors[-4:], line.decode(errors="replace").strip()]
+            # Read continuously, so a chatty ffmpeg never fills the pipe and
+            # stalls; keep only the last few lines.
+            while True:
+                try:
+                    line = await process.stderr.readline()
+                except ValueError:  # one line longer than the buffer
+                    line = await process.stderr.read(65536)
+                if not line:
+                    return
+                run["errors"][:] = [*run["errors"][-4:], line.decode(errors="replace").strip()]
 
         async def feed() -> None:
             try:
-                async for chunk in coordinator.api.async_download_segments(recordings):
-                    process.stdin.write(chunk)
-                    await process.stdin.drain()
+                async with contextlib.aclosing(
+                    coordinator.api.async_download_segments(recordings)
+                ) as segments:
+                    async for chunk in segments:
+                        process.stdin.write(chunk)
+                        await process.stdin.drain()
             except (ConnectionResetError, BrokenPipeError, HikvisionError) as err:
                 _LOGGER.debug("Download of channel %s stopped: %s", chan.id, err)
             finally:
                 if process.stdin and not process.stdin.is_closing():
                     process.stdin.close()
 
-        tasks = [asyncio.ensure_future(feed()), asyncio.ensure_future(drain_errors())]
-        return process, tasks, errors
+        run["tasks"] = [asyncio.ensure_future(feed()), asyncio.ensure_future(drain_errors())]
+        return run
 
-    async def stop(process, tasks, errors) -> str:
-        tasks[0].cancel()
-        if process.returncode is None:
-            process.kill()
-        await process.wait()
-        await asyncio.gather(tasks[1], return_exceptions=True)
-        return errors[-1] if errors else ""
+    async def stop(run) -> str:
+        """End ffmpeg and the recorder download behind it. Safe to call twice."""
+        if not run["stopped"]:
+            run["stopped"] = True
+            run["tasks"][0].cancel()
+            # Wait for the download to close, so its recorder session is
+            # released now, not whenever it is garbage collected.
+            await asyncio.gather(run["tasks"][0], return_exceptions=True)
+            if run["process"].returncode is None:
+                run["process"].kill()
+            await run["process"].wait()
+            await asyncio.gather(run["tasks"][1], return_exceptions=True)
+        return run["errors"][-1] if run["errors"] else ""
 
     sound = _audio_args(chan) != ("-an",)
-    process, tasks, errors = await launch(sound)
-    first = await process.stdout.read(65536)
-    if not first and sound:
-        # The footage's sound is not what the camera's setting says (recorded
-        # before a change, or a codec ffmpeg cannot open): play it silent, as
-        # before, rather than not at all.
-        reason = await stop(process, tasks, errors)
-        _LOGGER.debug("Channel %s: no output with sound (%s); retrying silent", chan.id, reason)
-        process, tasks, errors = await launch(False)
-        first = await process.stdout.read(65536)
-    if not first:
-        reason = await stop(process, tasks, errors)
-        _LOGGER.debug("Channel %s: recording could not be read: %s", chan.id, reason)
-        raise web.HTTPBadGateway(reason="The recording could not be read")
-
-    filename = (
-        f"{chan.name.replace(' ', '_')}_{dt_util.as_local(start):%Y%m%d_%H%M%S}.mp4"
-    )
-    response = web.StreamResponse(
-        headers={
-            "Content-Type": "video/mp4",
-            "Cache-Control": "no-store",
-            "Content-Disposition": f'attachment; filename="{filename}"',
-        }
-    )
-    await response.prepare(request)
+    run = await launch(sound)
+    response: web.StreamResponse | None = None
+    # Everything from here on is inside one try: a viewer who leaves at any
+    # point (waiting for the first byte, the fallback, the headers or the
+    # writes) still has ffmpeg and the recorder download closed behind them.
     try:
+        first = await run["process"].stdout.read(65536)
+        if not first and sound:
+            # The footage's sound is not what the camera's setting says
+            # (recorded before a change, or a codec ffmpeg cannot open): play
+            # it silent, as before, rather than not at all.
+            reason = await stop(run)
+            _LOGGER.debug(
+                "Channel %s: no output with sound (%s); retrying silent", chan.id, reason
+            )
+            run = await launch(False)
+            first = await run["process"].stdout.read(65536)
+        if not first:
+            reason = await stop(run)
+            _LOGGER.debug("Channel %s: recording could not be read: %s", chan.id, reason)
+            raise web.HTTPBadGateway(reason="The recording could not be read")
+
+        filename = (
+            f"{chan.name.replace(' ', '_')}_{dt_util.as_local(start):%Y%m%d_%H%M%S}.mp4"
+        )
+        response = web.StreamResponse(
+            headers={
+                "Content-Type": "video/mp4",
+                "Cache-Control": "no-store",
+                "Content-Disposition": f'attachment; filename="{filename}"',
+            }
+        )
+        await response.prepare(request)
         await response.write(first)
-        while chunk := await process.stdout.read(65536):
+        while chunk := await run["process"].stdout.read(65536):
             await response.write(chunk)
         await response.write_eof()
-    except (ConnectionResetError, asyncio.CancelledError):
-        pass
+        return response
+    except ConnectionResetError:
+        # The viewer left. CancelledError (the same, seen by aiohttp) is not
+        # caught: it carries on up after the finally has cleaned up.
+        _LOGGER.debug("Channel %s: viewer left", chan.id)
+        if response is None:
+            raise
+        return response
     finally:
-        reason = await stop(process, tasks, errors)
+        reason = await stop(run)
         if reason:
             _LOGGER.debug("ffmpeg for channel %s said: %s", chan.id, reason)
-    return response
 
 
 # ------------------------------------------------------------ stream cache
