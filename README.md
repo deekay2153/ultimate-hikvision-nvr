@@ -41,12 +41,9 @@ exposes the same surfaces. Reports from other models are welcome.
 | **Events are opt-in** | The alert stream is one long-lived connection to the recorder; it only opens when you choose events. |
 | **No sidebar panel, no injected script** | The card is a dashboard resource. The injected copy never registered in Firefox. |
 
-<p align="center">
-  <img src="docs/images/card-live.png" alt="The card in live view: one channel large, the rest as a strip below" width="480">
-  &nbsp;
-  <img src="docs/images/setup-dialog.png" alt="Adding an NVR from the Home Assistant UI" width="420">
-</p>
-<p align="center"><sub>The card in live view, and setup from the UI. Camera imagery is blurred here; it is not blurred in the integration.</sub></p>
+> **Want the camera wall in the screenshot above?** Install the
+> [Ultimate Hikvision NVR card](https://github.com/deekay2153/ultimate-hikvision-nvr-card)
+> as well. This integration does the recorder side; the card is the wall.
 
 ## What you get
 
@@ -76,9 +73,17 @@ exposes the same surfaces. Reports from other models are welcome.
 Copy `custom_components/hikvision_nvr/` into your `config/custom_components/`
 directory and restart Home Assistant.
 
-### The card
+### The camera wall
 
-Nothing to do. The integration ships its own card and adds it to the dashboard
+For the wall in the screenshot (live tiles, person / vehicle timeline,
+detections list, PTZ joystick), install the
+[Ultimate Hikvision NVR card](https://github.com/deekay2153/ultimate-hikvision-nvr-card)
+from HACS (category **Dashboard**) and add `type: custom:ultimate-nvr-card`.
+It finds this integration's recorder and cameras by itself.
+
+### The built-in card (basic)
+
+Nothing to do. The integration ships its own, simpler card and adds it to the dashboard
 resources on startup, so it is available on any dashboard:
 
 Add it from **Add card → Hikvision** and pick everything from dropdowns — the

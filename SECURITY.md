@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Report privately through
-[GitHub security advisories](https://github.com/techmarkai/hikvision-nvr-ha/security/advisories/new).
+[GitHub security advisories](https://github.com/deekay2153/ultimate-hikvision-nvr/security/advisories/new).
 Please do not open a public issue for anything exploitable.
 
 ## What this integration handles

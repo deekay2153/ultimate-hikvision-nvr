@@ -1068,5 +1068,5 @@ if (!window.customCards.some((c) => c.type === "hikvision-nvr-card"))
   name: "Hikvision",
   description: "Live view and history playback for a Hikvision NVR",
   preview: true,
-  documentationURL: "https://github.com/techmarkai/hikvision-nvr-ha",
+  documentationURL: "https://github.com/deekay2153/ultimate-hikvision-nvr",
 });
