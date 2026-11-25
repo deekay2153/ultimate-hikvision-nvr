@@ -116,6 +116,28 @@ def _epoch_range(start: str, end: str) -> tuple[datetime, datetime]:
     return start_dt, end_dt
 
 
+# Audio the recordings can carry that ffmpeg decodes reliably, by the name the
+# recorder gives the stream's codec. Anything else (G.722.1 above all, which
+# PyAV and many ffmpeg builds cannot decode) is dropped, as it always was.
+_SAFE_AUDIO = frozenset({"g.711ulaw", "g.711alaw", "aac", "pcm"})
+
+
+def _audio_args(chan) -> tuple[str, ...]:
+    """ffmpeg options for a replay's sound: AAC when the camera's is safe, else none.
+
+    The video is always copied untouched; only the (8 kHz mono, a few kB/s)
+    audio is encoded, so a replay is exactly as smooth as before.
+    """
+    codec = (getattr(chan, "audio_codec", None) or "").strip().lower().replace(" ", "")
+    if getattr(chan, "has_audio", False) and codec in _SAFE_AUDIO:
+        return (
+            "-map", "0:v:0", "-map", "0:a:0?",
+            "-c:a", "aac", "-b:a", "48k", "-ar", "16000",
+            "-af", "aresample=async=1",
+        )
+    return ("-an",)
+
+
 def _trim_args(
     first_segment: datetime, start: datetime, end: datetime
 ) -> tuple[str, ...]:
@@ -524,8 +546,10 @@ class ClipView(_BaseView):
     component. These NVRs record a G.722.1 audio track, PyAV cannot name that
     codec, and HA's stream worker dies on it with
     "'AudioStream' object has no attribute 'name'" -- so HLS playback produces a
-    player stuck at 0:00. Dropping audio (-an) sidesteps it entirely, and
-    fragmented MP4 starts faster than HLS because there is no segmenting step.
+    player stuck at 0:00. Here ffmpeg handles the audio instead: G.711 / AAC /
+    PCM sound is re-encoded to AAC, anything else is dropped (see
+    _audio_args). Fragmented MP4 starts faster than HLS because there is no
+    segmenting step.
 
     Times are Unix seconds in the path, not the query string, because signed
     URLs (auth/sign_path) sign an empty parameter list -- a query would break
@@ -564,7 +588,7 @@ class ClipView(_BaseView):
             "-fflags", "+nobuffer+flush_packets",
             "-flags", "low_delay",
             "-i", source,
-            "-an",                      # see the docstring: HA/PyAV vs G.722.1
+            *_audio_args(chan),         # sound when it is safe; see _audio_args
             "-c:v", "copy",             # no transcode; the NVR's bitstream as-is
             "-f", "mp4",
             # Every fragment must begin on a keyframe or the browser cannot
@@ -742,7 +766,7 @@ async def _async_send_range(
         get_ffmpeg_manager(hass).binary,
         "-hide_banner", "-loglevel", "error",
         "-i", "pipe:0",
-        "-an",
+        *_audio_args(chan),
         "-c:v", "copy",
         *_trim_args(recordings[0].start, start, end),
         "-f", "mp4",

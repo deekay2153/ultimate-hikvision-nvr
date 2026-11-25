@@ -5,6 +5,14 @@ features, the patch version for fixes. `manifest.json` carries the version HACS
 installs, and the frontend cache-busts on it — so an upgrade always ships a
 matching card.
 
+## 1.2.0
+
+- **Replays have sound.** Cameras that record G.711, AAC or PCM audio now play
+  it in replays and saved clips: the sound is re-encoded to AAC while the video
+  is still copied untouched. Cameras with audio off, or a codec ffmpeg cannot
+  decode reliably (G.722.1, G.726), stay silent as before. iPhone / iPad
+  replays go through Home Assistant's stream route and stay silent.
+
 ## 1.1.0 — fork: Ultimate Hikvision NVR
 
 A fork of [techmarkai/hikvision-nvr-ha](https://github.com/techmarkai/hikvision-nvr-ha)

@@ -46,5 +46,6 @@ jobs:
       - run: python tests/test_ptz.py
       - run: python tests/test_status.py
       - run: python tests/test_prune.py
+      - run: python tests/test_audio.py
       - run: node --check custom_components/hikvision_nvr/frontend/hikvision-nvr-card.js
       - run: node --check custom_components/hikvision_nvr/frontend/hikvision-nvr-panel.js
