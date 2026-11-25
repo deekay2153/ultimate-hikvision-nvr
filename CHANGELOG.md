@@ -5,6 +5,34 @@ features, the patch version for fixes. `manifest.json` carries the version HACS
 installs, and the frontend cache-busts on it — so an upgrade always ships a
 matching card.
 
+## 1.1.0 — fork: Hikvision NVR Wall
+
+A fork of [techmarkai/hikvision-nvr-ha](https://github.com/techmarkai/hikvision-nvr-ha)
+1.0.0, with the fixes from running it daily on a real recorder. Same domain
+(`hikvision_nvr`), so it replaces the original in place.
+
+- **Recordings line up in local time.** Hikvision search and playback times
+  are the recorder's own clock time, even with a trailing `Z`; 1.0.0 read them
+  as UTC, so every recording was hours out outside UTC. Home Assistant's time
+  zone is used, or set the new *Recorder time zone* option.
+- **Works on Home Assistant 2026.10+.** The camera devices no longer use the
+  `via_device` form 2026.10 refuses, which took every camera down.
+- **Person / vehicle detections** for the timeline: the recorder's own smart
+  search, with thumbnails, kept in a small index so a day is searched once
+  (`/api/hikvision_nvr/{device}/{channel}/detections`, `.../picture`,
+  `.../thumb`).
+- **Smoother replays on iPhone / iPad.** One playback stream per viewer: the
+  clip a viewer leaves is stopped at once instead of idling for minutes and
+  competing with the next one (`client=` and `stop=1` on the playback view).
+- **Events are opt-in.** The event stream (one long-lived connection to the
+  recorder) and the notification check only run when events are chosen in the
+  options. Playback and the timeline need none.
+- **No sidebar panel, no injected script.** The card is added as a dashboard
+  resource; the injected copy ran before Firefox's custom element support was
+  ready and never registered.
+- The recorder device no longer carries its MAC address, which made Home
+  Assistant merge it into other Hikvision integrations' devices.
+
 ## 1.0.0 — first release
 
 - **Live view** through Home Assistant's own camera element, which negotiates
