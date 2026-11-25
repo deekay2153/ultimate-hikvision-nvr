@@ -289,7 +289,7 @@ def _forget_old_days(hass) -> None:
     """Keep only recent days in memory; the files stay on disk."""
     store = hass.data.get(INDEX_KEY) or {}
     cutoff = (dt_util.now().date() - timedelta(days=3)).isoformat()
-    for key in [k for k in store if k[1] < cutoff]:
+    for key in [k for k in store if k[2] < cutoff]:  # (slug, channel, day)
         if not store[key]["lock"].locked():
             store.pop(key, None)
 
