@@ -5,9 +5,12 @@
 [![Validate](https://github.com/deekay2153/ultimate-hikvision-nvr/actions/workflows/validate.yml/badge.svg)](https://github.com/deekay2153/ultimate-hikvision-nvr/actions/workflows/validate.yml)
 [![Release](https://img.shields.io/github/v/release/deekay2153/ultimate-hikvision-nvr?sort=semver)](https://github.com/deekay2153/ultimate-hikvision-nvr/releases)
 [![HACS: custom](https://img.shields.io/badge/HACS-custom-41BDF5.svg)](https://hacs.xyz/)
-[![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/deekay2153)
 
-![The camera wall, made with the Ultimate Hikvision NVR card](https://raw.githubusercontent.com/deekay2153/ultimate-hikvision-nvr-card/main/docs/wall.jpg)
+<p align="center"><img src="https://raw.githubusercontent.com/deekay2153/ultimate-hikvision-nvr-card/main/docs/wall.jpg" alt="A camera wall built on this integration with the Ultimate Hikvision NVR card"><br><sub>A real wall, built with the <a href="https://github.com/deekay2153/ultimate-hikvision-nvr-card">Ultimate Hikvision NVR card</a> (camera pictures blurred).</sub></p>
+
+<p align="center"><a href="https://www.buymeacoffee.com/deekay2153"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy me a coffee" height="50"></a></p>
+
+> Not affiliated with or endorsed by Hikvision. "Hikvision" is their trademark. Use at your own risk.
 
 - **Every camera as a Home Assistant camera**, with live view in the app, on the web and on a Chromecast.
 - **Playback from the NVR itself.** Scrub a day, play any moment, save a clip. No second copy of your footage.
@@ -211,7 +214,9 @@ This project is not affiliated with or endorsed by Hikvision. Thanks to
 
 ## Support
 
-If this saves you a trip to the recorder's own app, you can [buy me a coffee](https://www.buymeacoffee.com/deekay2153). Thank you!
+If this saves you a trip to the recorder's own app, a coffee keeps it going. Thank you!
+
+<a href="https://www.buymeacoffee.com/deekay2153"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy me a coffee" height="45"></a>
 
 ## Licence
 
