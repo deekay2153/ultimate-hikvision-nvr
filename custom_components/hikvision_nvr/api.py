@@ -132,6 +132,7 @@ def _audio_args(chan) -> tuple[str, ...]:
     if getattr(chan, "has_audio", False) and codec in _SAFE_AUDIO:
         return (
             "-map", "0:v:0", "-map", "0:a:0?",
+            # 16 kHz: browsers handle 8 kHz AAC poorly; nothing is lost upsampling.
             "-c:a", "aac", "-b:a", "48k", "-ar", "16000",
             "-af", "aresample=async=1",
         )
@@ -546,10 +547,9 @@ class ClipView(_BaseView):
     component. These NVRs record a G.722.1 audio track, PyAV cannot name that
     codec, and HA's stream worker dies on it with
     "'AudioStream' object has no attribute 'name'" -- so HLS playback produces a
-    player stuck at 0:00. Here ffmpeg handles the audio instead: G.711 / AAC /
-    PCM sound is re-encoded to AAC, anything else is dropped (see
-    _audio_args). Fragmented MP4 starts faster than HLS because there is no
-    segmenting step.
+    player stuck at 0:00. Dropping audio (-an) sidesteps it; sound is played
+    from the fast route instead (_async_send_range). Fragmented MP4 starts
+    faster than HLS because there is no segmenting step.
 
     Times are Unix seconds in the path, not the query string, because signed
     URLs (auth/sign_path) sign an empty parameter list -- a query would break
@@ -588,7 +588,10 @@ class ClipView(_BaseView):
             "-fflags", "+nobuffer+flush_packets",
             "-flags", "low_delay",
             "-i", source,
-            *_audio_args(chan),         # sound when it is safe; see _audio_args
+            # Silent on purpose: on this real-time route the MP4 muxer would
+            # hold video back whenever the audio pauses, then release it in a
+            # burst. Sound plays on the fast route (_async_send_range).
+            "-an",
             "-c:v", "copy",             # no transcode; the NVR's bitstream as-is
             "-f", "mp4",
             # Every fragment must begin on a keyframe or the browser cannot
@@ -762,20 +765,69 @@ async def _async_send_range(
     recordings = await coordinator.api.async_resolve_range(chan.id, start, end)
     if not recordings:
         raise web.HTTPNotFound(reason="Nothing was recorded in that range")
-    process = await asyncio.create_subprocess_exec(
-        get_ffmpeg_manager(hass).binary,
-        "-hide_banner", "-loglevel", "error",
-        "-i", "pipe:0",
-        *_audio_args(chan),
-        "-c:v", "copy",
-        *_trim_args(recordings[0].start, start, end),
-        "-f", "mp4",
-        "-movflags", "frag_keyframe+empty_moov+default_base_moof",
-        "pipe:1",
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.DEVNULL,
-    )
+    binary = get_ffmpeg_manager(hass).binary
+
+    async def launch(sound: bool):
+        """Start ffmpeg and the recorder download feeding it."""
+        process = await asyncio.create_subprocess_exec(
+            binary,
+            "-hide_banner", "-loglevel", "error",
+            "-i", "pipe:0",
+            *(_audio_args(chan) if sound else ("-an",)),
+            "-c:v", "copy",
+            *_trim_args(recordings[0].start, start, end),
+            "-f", "mp4",
+            "-movflags", "frag_keyframe+empty_moov+default_base_moof",
+            "pipe:1",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        errors: list[str] = []
+
+        async def drain_errors() -> None:
+            # Kept short and read continuously, so a chatty ffmpeg never fills
+            # the pipe and stalls.
+            while line := await process.stderr.readline():
+                errors[:] = [*errors[-4:], line.decode(errors="replace").strip()]
+
+        async def feed() -> None:
+            try:
+                async for chunk in coordinator.api.async_download_segments(recordings):
+                    process.stdin.write(chunk)
+                    await process.stdin.drain()
+            except (ConnectionResetError, BrokenPipeError, HikvisionError) as err:
+                _LOGGER.debug("Download of channel %s stopped: %s", chan.id, err)
+            finally:
+                if process.stdin and not process.stdin.is_closing():
+                    process.stdin.close()
+
+        tasks = [asyncio.ensure_future(feed()), asyncio.ensure_future(drain_errors())]
+        return process, tasks, errors
+
+    async def stop(process, tasks, errors) -> str:
+        tasks[0].cancel()
+        if process.returncode is None:
+            process.kill()
+        await process.wait()
+        await asyncio.gather(tasks[1], return_exceptions=True)
+        return errors[-1] if errors else ""
+
+    sound = _audio_args(chan) != ("-an",)
+    process, tasks, errors = await launch(sound)
+    first = await process.stdout.read(65536)
+    if not first and sound:
+        # The footage's sound is not what the camera's setting says (recorded
+        # before a change, or a codec ffmpeg cannot open): play it silent, as
+        # before, rather than not at all.
+        reason = await stop(process, tasks, errors)
+        _LOGGER.debug("Channel %s: no output with sound (%s); retrying silent", chan.id, reason)
+        process, tasks, errors = await launch(False)
+        first = await process.stdout.read(65536)
+    if not first:
+        reason = await stop(process, tasks, errors)
+        _LOGGER.debug("Channel %s: recording could not be read: %s", chan.id, reason)
+        raise web.HTTPBadGateway(reason="The recording could not be read")
 
     filename = (
         f"{chan.name.replace(' ', '_')}_{dt_util.as_local(start):%Y%m%d_%H%M%S}.mp4"
@@ -788,30 +840,17 @@ async def _async_send_range(
         }
     )
     await response.prepare(request)
-
-    async def feed() -> None:
-        try:
-            async for chunk in coordinator.api.async_download_segments(recordings):
-                process.stdin.write(chunk)
-                await process.stdin.drain()
-        except (ConnectionResetError, BrokenPipeError, HikvisionError) as err:
-            _LOGGER.debug("Download of channel %s stopped: %s", chan.id, err)
-        finally:
-            if process.stdin and not process.stdin.is_closing():
-                process.stdin.close()
-
-    pump = asyncio.ensure_future(feed())
     try:
+        await response.write(first)
         while chunk := await process.stdout.read(65536):
             await response.write(chunk)
         await response.write_eof()
     except (ConnectionResetError, asyncio.CancelledError):
         pass
     finally:
-        pump.cancel()
-        if process.returncode is None:
-            process.kill()
-            await process.wait()
+        reason = await stop(process, tasks, errors)
+        if reason:
+            _LOGGER.debug("ffmpeg for channel %s said: %s", chan.id, reason)
     return response
 
 

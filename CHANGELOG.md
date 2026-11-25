@@ -10,8 +10,12 @@ matching card.
 - **Replays have sound.** Cameras that record G.711, AAC or PCM audio now play
   it in replays and saved clips: the sound is re-encoded to AAC while the video
   is still copied untouched. Cameras with audio off, or a codec ffmpeg cannot
-  decode reliably (G.722.1, G.726), stay silent as before. iPhone / iPad
-  replays go through Home Assistant's stream route and stay silent.
+  decode reliably (G.722.1, G.726), stay silent as before. If a recording's
+  sound turns out unreadable anyway (recorded before a setting change), the
+  replay plays silent instead of failing. Sound plays in desktop and Android
+  browsers and in saved clips; iPhone / iPad replays go through Home
+  Assistant's stream route and stay silent. The camera's main-stream audio
+  setting decides (that is what the recorder stores).
 
 ## 1.1.0 — fork: Ultimate Hikvision NVR
 

@@ -464,6 +464,7 @@ class HikvisionISAPI:
         try:
             root = await self.get_xml("/ISAPI/Streaming/channels")
             streams: dict[int, list[int]] = {}
+            audio: dict[int, dict[int, str | None]] = {}
             for node in root.findall("StreamingChannel"):
                 sid = int(_text(node, "id", "0"))
                 if not sid:
@@ -476,12 +477,22 @@ class HikvisionISAPI:
                     cid, Channel(id=cid, name=_text(node, "channelName") or f"Camera {cid}")
                 )
                 if _text(node, "Audio/enabled") == "true":
-                    channels[cid].has_audio = True
-                    channels[cid].audio_codec = (
+                    audio.setdefault(cid, {})[stream] = (
                         _text(node, "Audio/audioCompressionType") or None
                     )
             for cid, available in streams.items():
                 channels[cid].streams = sorted(available)
+            # What the recordings carry is the MAIN stream's audio (stream 1),
+            # so that one decides; a sub stream's sound only counts when the
+            # channel has no main stream listed at all.
+            for cid, by_stream in audio.items():
+                if 1 in streams.get(cid, []):
+                    if 1 in by_stream:
+                        channels[cid].has_audio = True
+                        channels[cid].audio_codec = by_stream[1]
+                else:
+                    channels[cid].has_audio = True
+                    channels[cid].audio_codec = next(iter(by_stream.values()))
         except (HikvisionError, DET.ParseError) as err:
             if not channels:
                 raise HikvisionError("Could not enumerate any channel") from err
