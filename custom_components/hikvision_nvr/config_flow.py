@@ -26,6 +26,7 @@ from homeassistant.helpers.selector import (
     TextSelectorConfig,
     TextSelectorType,
 )
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_CHANNELS,
@@ -33,6 +34,7 @@ from .const import (
     CONF_RTSP_PORT,
     CONF_SNAPSHOT_STREAM,
     CONF_STREAM,
+    CONF_TIMEZONE,
     CONF_USE_SSL,
     CONF_VERIFY_SSL,
     DEFAULT_ENABLED_EVENTS,
@@ -107,7 +109,10 @@ class HikvisionConfigFlow(ConfigFlow, domain=DOMAIN):
                     options={
                         CONF_STREAM: STREAM_SUB,
                         CONF_SNAPSHOT_STREAM: STREAM_SUB,
-                        CONF_CHANNELS: [], CONF_EVENTS: [],  # PATCHED: playback only
+                        CONF_CHANNELS: [str(c.id) for c in api.channels],
+                        # No event sensors until chosen: each one keeps a
+                        # connection to the NVR open.
+                        CONF_EVENTS: [],
                     },
                 )
 
@@ -167,8 +172,13 @@ class HikvisionOptionsFlow(OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
         if user_input is not None:
-            return self.async_create_entry(data=user_input)
+            zone = (user_input.get(CONF_TIMEZONE) or "").strip()
+            if zone and dt_util.get_time_zone(zone) is None:
+                errors[CONF_TIMEZONE] = "bad_timezone"
+            else:
+                return self.async_create_entry(data={**user_input, CONF_TIMEZONE: zone})
 
         coordinator = getattr(self.config_entry, "runtime_data", None)
         channels = coordinator.api.channels if coordinator else []
@@ -228,6 +238,10 @@ class HikvisionOptionsFlow(OptionsFlow):
                     CONF_SNAPSHOT_STREAM,
                     default=current.get(CONF_SNAPSHOT_STREAM, STREAM_SUB),
                 ): vol.In({STREAM_MAIN: "Main stream", STREAM_SUB: "Sub stream"}),
+                vol.Optional(
+                    CONF_TIMEZONE,
+                    description={"suggested_value": current.get(CONF_TIMEZONE, "")},
+                ): str,
             }
         )
-        return self.async_show_form(step_id="init", data_schema=schema)
+        return self.async_show_form(step_id="init", data_schema=schema, errors=errors)

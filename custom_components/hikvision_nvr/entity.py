@@ -36,6 +36,8 @@ class HikvisionEntity(CoordinatorEntity[HikvisionCoordinator]):
                 name=channel.name,
                 manufacturer="Hikvision",
                 model=f"{info.get('model', 'NVR')} channel {channel.id}",
+                # No via_device: Home Assistant 2026.9 deprecated the tuple form and
+                # 2026.10 refuses it, which took every camera down.
                 configuration_url=(
                     f"http://{channel.ip_address}" if channel.ip_address else None
                 ),

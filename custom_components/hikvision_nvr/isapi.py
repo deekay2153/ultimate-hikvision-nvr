@@ -16,7 +16,7 @@ import re
 from base64 import b64encode
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, tzinfo
 from typing import Any
 from urllib.parse import quote
 from xml.etree import ElementTree as ET
@@ -24,7 +24,6 @@ from xml.etree import ElementTree as ET
 import aiohttp
 from defusedxml import ElementTree as DET
 from yarl import URL
-from homeassistant.util import dt as _dt_util  # PATCHED: this NVR reads Z times as local time
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -195,28 +194,42 @@ def _text(element: ET.Element | None, path: str, default: str = "") -> str:
     return default if found is None or found.text is None else found.text.strip()
 
 
+# Hikvision search and playback times are the recorder's own wall-clock time,
+# even when written with a trailing Z. Reading them as UTC put every recording
+# hours out anywhere but UTC. The integration sets this to the recorder's time
+# zone at start-up (Home Assistant's, unless the options say otherwise).
+_local_tz: tzinfo = UTC
+
+
+def set_local_timezone(zone: tzinfo) -> None:
+    """Tell the parser which time zone the recorder's clock is in."""
+    global _local_tz
+    _local_tz = zone
+
+
 def _parse_time(value: str) -> datetime:
-    """Parse the several timestamp shapes Hikvision emits."""
+    """Parse the several timestamp shapes Hikvision emits (recorder-local time)."""
     value = value.strip()
     if not value:
         raise ValueError("empty timestamp")
     # Compact form used inside playback URIs: 20260810T000024Z
     if "-" not in value and len(value) >= 16:
         return datetime.strptime(value[:16], "%Y%m%dT%H%M%SZ").replace(
-            tzinfo=_dt_util.get_default_time_zone()
+            tzinfo=_local_tz
         ).astimezone(UTC)
-    # ISO with or without offset; Python needs +HH:MM, Hikvision sometimes emits Z.
+    # ISO with or without offset. A trailing Z is not UTC here (see above); a
+    # real offset such as +10:00 is kept.
     parsed = datetime.fromisoformat(value.removesuffix("Z"))
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=_dt_util.get_default_time_zone())
+        parsed = parsed.replace(tzinfo=_local_tz)
     return parsed.astimezone(UTC)
 
 
 def to_isapi_time(value: datetime) -> str:
-    """Render a datetime the way the search API expects (always UTC)."""
+    """Render a datetime the way the search API expects (recorder-local time)."""
     if value.tzinfo is None:
         value = value.replace(tzinfo=UTC)
-    return value.astimezone(_dt_util.get_default_time_zone()).strftime(_TIME_FMT)
+    return value.astimezone(_local_tz).strftime(_TIME_FMT)
 
 
 class _Digest:
@@ -615,8 +628,8 @@ class HikvisionISAPI:
     ) -> str:
         """RTSP URL that replays a time range from the NVR's disks."""
         fmt = "%Y%m%dT%H%M%SZ"
-        start_s = start.astimezone(_dt_util.get_default_time_zone()).strftime(fmt)
-        end_s = end.astimezone(_dt_util.get_default_time_zone()).strftime(fmt)
+        start_s = start.astimezone(_local_tz).strftime(fmt)
+        end_s = end.astimezone(_local_tz).strftime(fmt)
         return (
             f"{self._rtsp_root(credentials)}"
             f"/Streaming/tracks/{channel * 100 + 1}"

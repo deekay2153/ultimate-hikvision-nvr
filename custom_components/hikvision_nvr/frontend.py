@@ -1,8 +1,9 @@
-"""Serve and register the card and the sidebar panel.
+"""Serve the card and register it as a dashboard resource.
 
-The card is shipped inside the integration and loaded with ``add_extra_js_url``,
-so it works the moment the integration is installed -- no copying into ``www/``
-and no manual Lovelace resource entry.
+The card is shipped inside the integration and added to the dashboard
+resources on start, so it works the moment the integration is installed -- no
+copying into ``www/`` and no manual resource entry. There is no sidebar panel:
+the card does that job on any dashboard.
 """
 
 from __future__ import annotations
@@ -10,7 +11,6 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from homeassistant.components.frontend import add_extra_js_url, async_register_built_in_panel
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.start import async_at_started
@@ -21,7 +21,6 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 URL_BASE = f"/{DOMAIN}_frontend"
-PANEL_PATH = "hikvision-nvr"
 # Set once the frontend is registered; also carries the card and panel URLs,
 # so its presence is the "already done" flag.
 DATA_URLS = f"{DOMAIN}_frontend_urls"
@@ -45,7 +44,7 @@ async def _async_asset_urls(hass: HomeAssistant) -> tuple[str, str]:
 
 
 async def async_setup_frontend(hass: HomeAssistant) -> None:
-    """Register the static files, the card and the sidebar panel. Idempotent."""
+    """Register the static files and the card resource. Idempotent."""
     if DATA_URLS in hass.data:
         return
     card_url, panel_url = await _async_asset_urls(hass)
@@ -59,25 +58,21 @@ async def async_setup_frontend(hass: HomeAssistant) -> None:
         ]
     )
 
-    # Loads the card on every dashboard, so `type: custom:hikvision-nvr-card`
-    # just works without a Resources entry.
-    # PATCHED OFF (loads before the Firefox element polyfill, card then never registers): add_extra_js_url(hass, card_url)
-    # Lovelace may not be set up yet -- we run during async_setup. Wait for
-    # start, so the resource lands whatever the component ordering.
+    # The card is added as a dashboard resource, not injected into every page
+    # (add_extra_js_url): injected early it ran before Firefox's custom element
+    # support was ready and the card never registered, and the companion app
+    # caches the page that carries injected scripts hard. Lovelace may not be
+    # set up yet -- we run during async_setup -- so wait for start.
     async_at_started(hass, _async_register_lovelace_resource)
 
     _LOGGER.debug("Hikvision NVR frontend registered at %s", card_url)
 
 
 async def _async_register_lovelace_resource(hass: HomeAssistant) -> None:
-    """Also register the card as a Lovelace resource.
+    """Register the card as a Lovelace resource (or bring its version up to date).
 
-    add_extra_js_url injects a script tag into the frontend's index.html, which
-    the companion app caches hard -- so on mobile the card can be missing while
-    it works in a browser. Lovelace resources are delivered over the websocket
-    instead, so they reach a client running a stale index. Belt and braces: the
-    module is fetched once either way, and its customElements.define is
-    guarded.
+    Resources are delivered over the websocket, so they also reach a companion
+    app running a stale cached page.
     """
     lovelace = hass.data.get("lovelace")
     resources = getattr(lovelace, "resources", None)

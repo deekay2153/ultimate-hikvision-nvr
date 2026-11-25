@@ -13,6 +13,7 @@ CONF_STREAM = "stream"
 CONF_SNAPSHOT_STREAM = "snapshot_stream"
 CONF_CHANNELS = "channels"
 CONF_EVENTS = "events"
+CONF_TIMEZONE = "timezone"
 
 DEFAULT_PORT = 80
 DEFAULT_SSL_PORT = 443

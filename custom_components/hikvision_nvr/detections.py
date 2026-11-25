@@ -100,7 +100,7 @@ async def _search(coordinator, channel_id: int, start, end):
     found = []
     position = 0
     truncated = False
-    for page in range(MAX_PAGES):
+    for _page in range(MAX_PAGES):
         body = json.dumps(
             {
                 "EventSearchDescription": {

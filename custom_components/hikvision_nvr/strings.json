@@ -35,14 +35,19 @@
           "channels": "Channels to expose",
           "stream": "Live view stream",
           "snapshot_stream": "Snapshot stream",
-          "events": "Events to expose"
+          "events": "Events to expose",
+          "timezone": "Recorder time zone"
         },
         "data_description": {
           "stream": "Main stream is full resolution. Sub stream is much lighter and starts faster.",
           "snapshot_stream": "Sub stream keeps thumbnails cheap on large systems.",
-          "events": "Only these become binary sensors. Untick what you do not need -- a capable NVR reports far more than most people want."
+          "events": "Only these become binary sensors. Nothing is chosen by default: each one keeps a connection to the recorder open. Playback, the timeline and its person / vehicle markers do not need any.",
+          "timezone": "Leave empty if the recorder's clock is set to the same time zone as Home Assistant. Otherwise its IANA name, for example Europe/London."
         }
       }
+    },
+    "error": {
+      "bad_timezone": "Not a time zone name Home Assistant knows."
     }
   },
   "services": {

@@ -20,11 +20,13 @@ from homeassistant.helpers import (
     issue_registry as ir,
 )
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.util import dt as dt_util
 
 from .api import async_register_api
 from .const import (
     CONF_EVENTS,
     CONF_RTSP_PORT,
+    CONF_TIMEZONE,
     CONF_USE_SSL,
     CONF_VERIFY_SSL,
     DEFAULT_RTSP_PORT,
@@ -39,6 +41,7 @@ from .isapi import (
     ConnectionFailed,
     HikvisionError,
     HikvisionISAPI,
+    set_local_timezone,
 )
 from .services import async_setup_services
 
@@ -78,10 +81,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: HikvisionConfigEntry) ->
     except (ConnectionFailed, HikvisionError) as err:
         raise ConfigEntryNotReady(f"Cannot connect to {api.host}: {err}") from err
 
+    # Recordings are searched and replayed in the recorder's own local time.
+    zone = dt_util.get_time_zone(entry.options.get(CONF_TIMEZONE) or "")
+    set_local_timezone(zone or dt_util.get_default_time_zone())
+
     coordinator = HikvisionCoordinator(hass, entry, api)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
-    # PATCHED OFF (no second alertStream): coordinator.start_event_listener()
+    # The NVR's event stream is one long-lived connection per client. Only
+    # open it when someone has chosen events to watch.
+    if entry.options.get(CONF_EVENTS):
+        coordinator.start_event_listener()
 
     # Register the NVR itself before the platforms register cameras that point
     # at it with via_device -- HA warns (and from 2025.12 will fail) if a
@@ -90,7 +100,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: HikvisionConfigEntry) ->
     dr.async_get(hass).async_get_or_create(
         config_entry_id=entry.entry_id,
         identifiers={(DOMAIN, coordinator.device_id)},
-        connections=set(),  # PATCHED: no MAC link, avoids merging with other Hikvision devices
+        # No MAC link: Home Assistant merges devices that share a connection,
+        # which folded this NVR into another Hikvision integration's device.
+        connections=set(),
         name=info.get("name") or api.host,
         manufacturer="Hikvision",
         model=info.get("model"),
@@ -100,7 +112,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: HikvisionConfigEntry) ->
     )
 
     _async_remove_obsolete_entities(hass, entry, coordinator)
-    # PATCHED OFF: await _async_check_notifications(hass, entry, api)
+    if entry.options.get(CONF_EVENTS):
+        await _async_check_notifications(hass, entry, api)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_reload_on_options))
