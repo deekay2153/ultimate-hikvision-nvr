@@ -21,6 +21,9 @@ A fork of [techmarkai/hikvision-nvr-ha](https://github.com/techmarkai/hikvision-
   search, with thumbnails, kept in a small index so a day is searched once
   (`/api/hikvision_nvr/{device}/{channel}/detections`, `.../picture`,
   `.../thumb`).
+  A recorder without that search (no AcuSense, older firmware) is noticed
+  once, logged once, and answered with an empty list and `supported: false`
+  instead of an error; the timeline then shows recordings without markers.
 - **Smoother replays on iPhone / iPad.** One playback stream per viewer: the
   clip a viewer leaves is stopped at once instead of idling for minutes and
   competing with the next one (`client=` and `stop=1` on the playback view).

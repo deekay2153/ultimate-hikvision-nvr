@@ -1,4 +1,4 @@
-"""PATCH (not upstream): person / vehicle detections for the timeline.
+"""Person / vehicle detections for the timeline (added by the fork).
 
 The NVR's event search returns the same people and vehicle detections the
 Hik-Connect app draws on its timeline, each with a snapshot. These views expose
@@ -38,6 +38,11 @@ from homeassistant.util import dt as dt_util
 from .api import _BaseView, _get_channel, _get_coordinator, _handle_errors, _time_range
 from .const import DOMAIN
 from .coordinator import async_coordinators
+from .isapi import HikvisionError, UnsupportedOperation, local_timezone
+
+
+class DetectionsUnsupported(Exception):
+    """The recorder has no person / vehicle search."""
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -53,7 +58,11 @@ THUMB_WIDTH = 320
 THUMB_KEEP_SECONDS = 7 * 86400
 INDEX_KEEP_SECONDS = 30 * 86400
 PREFETCH_EVERY = timedelta(minutes=5)
-PREFETCH_CHANNELS = (1, 2, 5, 6, 7, 8, 9, 10)
+# A recorder without the person / vehicle search (no AcuSense, older
+# firmware) answers it with an HTTP error. It is then left alone for this long
+# instead of being asked again on every pass and every page load.
+UNSUPPORTED_RETRY = 6 * 3600
+UNSUPPORTED_KEY = f"{DOMAIN}_detections_unsupported"
 PREFETCH_MAX = 80
 VISIT_GAP = 60
 
@@ -69,8 +78,26 @@ def _later(when, delta):
 
 
 def _stamp(value) -> str:
-    """Local time with its real offset, which is what this search expects."""
-    return dt_util.as_local(value).isoformat(timespec="seconds")
+    """The recorder's local time with its real offset, which this search expects."""
+    return dt_util.as_utc(value).astimezone(local_timezone()).isoformat(timespec="seconds")
+
+
+def _unsupported(hass, coordinator) -> bool:
+    since = hass.data.get(UNSUPPORTED_KEY, {}).get(coordinator.device_id)
+    return since is not None and time.time() - since < UNSUPPORTED_RETRY
+
+
+def _mark(hass, coordinator, supported: bool) -> None:
+    marks = hass.data.setdefault(UNSUPPORTED_KEY, {})
+    if supported:
+        marks.pop(coordinator.device_id, None)
+    elif coordinator.device_id not in marks:
+        _LOGGER.info(
+            "%s has no person / vehicle search (no AcuSense, or older firmware): "
+            "the timeline shows recordings without detection markers",
+            coordinator.device_id,
+        )
+        marks[coordinator.device_id] = time.time()
 
 
 def _picture_ref(url: str | None) -> str | None:
@@ -116,8 +143,20 @@ async def _search(coordinator, channel_id: int, start, end):
                 }
             }
         )
-        response = await coordinator.api.request("POST", SEARCH_PATH, data=body)
-        result = json.loads(await response.text()).get("EventSearchResult", {})
+        try:
+            response = await coordinator.api.request("POST", SEARCH_PATH, data=body)
+            result = json.loads(await response.text()).get("EventSearchResult", {})
+        except UnsupportedOperation as err:
+            raise DetectionsUnsupported(str(err)) from err
+        except HikvisionError as err:
+            # The recorder refused the request itself (not a timeout or a
+            # dropped connection, which are worth trying again).
+            if type(err) is HikvisionError and re.search(r"HTTP (400|404|405|501)", str(err)):
+                raise DetectionsUnsupported(str(err)) from err
+            raise
+        except (ValueError, AttributeError) as err:
+            # An answer that is not the JSON search result: no such search here.
+            raise DetectionsUnsupported(str(err)) from err
         targets = result.get("Targets") or []
         for item in targets:
             kind = KINDS.get(item.get("eventType"))
@@ -331,11 +370,18 @@ def async_start_prefetch(hass) -> None:
             have = await hass.async_add_executor_job(_list_names, _thumb_dir(hass))
             for coordinator in async_coordinators(hass).values():
                 for day in days:
-                    for channel_id in PREFETCH_CHANNELS:
+                    if _unsupported(hass, coordinator):
+                        break
+                    channels = [c.id for c in coordinator.api.channels if c.online]
+                    for channel_id in channels:
                         try:
                             found = await _day_detections(
                                 hass, coordinator, channel_id, day, max_age=0
                             )
+                            _mark(hass, coordinator, True)
+                        except DetectionsUnsupported:
+                            _mark(hass, coordinator, False)
+                            break
                         except Exception as err:
                             _LOGGER.debug(f"Detection pass: search failed ch {channel_id}: {err!r}")
                             continue
@@ -405,6 +451,17 @@ class DetectionsView(_BaseView):
         chan = _get_channel(coordinator, channel)
         start, end = _time_range(request)
         truncated = False
+        if _unsupported(hass, coordinator):
+            return self.json(
+                {
+                    "channel": chan.id,
+                    "start": start.isoformat(),
+                    "end": end.isoformat(),
+                    "truncated": False,
+                    "supported": False,
+                    "detections": [],
+                }
+            )
         try:
             day = dt_util.as_local(start).date()
             day_start, day_end = _day_bounds(day)
@@ -416,6 +473,19 @@ class DetectionsView(_BaseView):
                 found = [i for i in items if low <= i["time"] <= high]
             else:
                 found, truncated = await _search(coordinator, chan.id, start, end)
+            _mark(hass, coordinator, True)
+        except DetectionsUnsupported:
+            _mark(hass, coordinator, False)
+            return self.json(
+                {
+                    "channel": chan.id,
+                    "start": start.isoformat(),
+                    "end": end.isoformat(),
+                    "truncated": False,
+                    "supported": False,
+                    "detections": [],
+                }
+            )
         except Exception as err:
             _LOGGER.warning(f"Detection search failed for channel {chan.id}: {err!r}")
             raise
@@ -425,6 +495,7 @@ class DetectionsView(_BaseView):
                 "start": start.isoformat(),
                 "end": end.isoformat(),
                 "truncated": truncated,
+                "supported": True,
                 "detections": found,
             }
         )

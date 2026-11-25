@@ -214,6 +214,11 @@ def set_local_timezone(zone: tzinfo) -> None:
     _local_tz = zone
 
 
+def local_timezone() -> tzinfo:
+    """The recorder's time zone, as set at start-up."""
+    return _local_tz
+
+
 def _parse_time(value: str) -> datetime:
     """Parse the several timestamp shapes Hikvision emits (recorder-local time)."""
     value = value.strip()
