@@ -5,7 +5,7 @@ features, the patch version for fixes. `manifest.json` carries the version HACS
 installs, and the frontend cache-busts on it — so an upgrade always ships a
 matching card.
 
-## 1.1.0 — fork: Hikvision NVR Wall
+## 1.1.0 — fork: Ultimate Hikvision NVR
 
 A fork of [techmarkai/hikvision-nvr-ha](https://github.com/techmarkai/hikvision-nvr-ha)
 1.0.0, with the fixes from running it daily on a real recorder. Same domain

@@ -1,9 +1,9 @@
 <img src="custom_components/hikvision_nvr/brand/logo.png" alt="Hikvision NVR for Home Assistant" width="420">
 
-# Hikvision NVR Wall for Home Assistant
+# Ultimate Hikvision NVR for Home Assistant
 
-[![Validate](https://github.com/deekay2153/hikvision-nvr-wall/actions/workflows/validate.yml/badge.svg)](https://github.com/deekay2153/hikvision-nvr-wall/actions/workflows/validate.yml)
-[![Release](https://img.shields.io/github/v/release/deekay2153/hikvision-nvr-wall?sort=semver)](https://github.com/deekay2153/hikvision-nvr-wall/releases)
+[![Validate](https://github.com/deekay2153/ultimate-hikvision-nvr/actions/workflows/validate.yml/badge.svg)](https://github.com/deekay2153/ultimate-hikvision-nvr/actions/workflows/validate.yml)
+[![Release](https://img.shields.io/github/v/release/deekay2153/ultimate-hikvision-nvr?sort=semver)](https://github.com/deekay2153/ultimate-hikvision-nvr/releases)
 [![HACS: custom](https://img.shields.io/badge/HACS-custom-41BDF5.svg)](https://hacs.xyz/)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.2%2B-41BDF5.svg)](https://www.home-assistant.io/)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-black.svg)](LICENSE)
@@ -15,7 +15,7 @@ a native Home Assistant integration, added from the UI.
 This is a fork of [techmarkai/hikvision-nvr-ha](https://github.com/techmarkai/hikvision-nvr-ha)
 1.0.0 (MIT), with the fixes from running it every day on a real recorder. It
 keeps the same domain (`hikvision_nvr`), so it replaces the original in place.
-It is also the back end for the **[Hikvision NVR Wall card](https://github.com/deekay2153/hikvision-nvr-wall-card)**,
+It is also the back end for the **[Ultimate Hikvision NVR card](https://github.com/deekay2153/ultimate-hikvision-nvr-card)**,
 a camera wall with a live grid, a PTZ joystick and a detections timeline.
 
 Verified on a 10-channel Hikvision NVR with a dual-lens PTZ, H.265 main streams
@@ -61,9 +61,9 @@ exposes the same surfaces. Reports from other models are welcome.
 
 ### HACS (recommended)
 
-1. HACS → ⋮ → **Custom repositories** → add `https://github.com/deekay2153/hikvision-nvr-wall`,
+1. HACS → ⋮ → **Custom repositories** → add `https://github.com/deekay2153/ultimate-hikvision-nvr`,
    category **Integration**. (Using the original? Remove it first: same domain.)
-2. Install **Hikvision NVR Wall**, then restart Home Assistant.
+2. Install **Ultimate Hikvision NVR**, then restart Home Assistant.
 3. **Settings → Devices & Services → Add Integration → Hikvision NVR**.
 
 ### Manual
