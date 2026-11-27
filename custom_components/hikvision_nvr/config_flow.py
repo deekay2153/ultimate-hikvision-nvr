@@ -248,7 +248,10 @@ class HikvisionOptionsFlow(OptionsFlow):
 
 
 def _zone_unknown(name: str) -> bool:
-    """True if Home Assistant doesn't know this time zone (newer Python raises instead of returning None)."""
+    """True if Home Assistant doesn't know this time zone.
+
+    Newer Python raises instead of returning None, so both count as unknown.
+    """
     try:
         return dt_util.get_time_zone(name) is None
     except ValueError:
