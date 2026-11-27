@@ -81,7 +81,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: HikvisionConfigEntry) ->
         raise ConfigEntryNotReady(f"Cannot connect to {api.host}: {err}") from err
 
     # Recordings are searched and replayed in the recorder's own local time.
-    zone = dt_util.get_time_zone(entry.options.get(CONF_TIMEZONE) or "")
+    # Blank means "same as Home Assistant". (Newer Python raises on an empty
+    # zone name instead of returning None, so never pass one.)
+    name = (entry.options.get(CONF_TIMEZONE) or "").strip()
+    zone = None
+    if name:
+        try:
+            zone = dt_util.get_time_zone(name)
+        except ValueError:
+            _LOGGER.warning("Unknown time zone %r for the recorder; using Home Assistant's", name)
     api.local_tz = zone or dt_util.get_default_time_zone()
 
     coordinator = HikvisionCoordinator(hass, entry, api)

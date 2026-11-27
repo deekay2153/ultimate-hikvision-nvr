@@ -175,7 +175,7 @@ class HikvisionOptionsFlow(OptionsFlow):
         errors: dict[str, str] = {}
         if user_input is not None:
             zone = (user_input.get(CONF_TIMEZONE) or "").strip()
-            if zone and dt_util.get_time_zone(zone) is None:
+            if zone and _zone_unknown(zone):
                 errors[CONF_TIMEZONE] = "bad_timezone"
             else:
                 return self.async_create_entry(data={**user_input, CONF_TIMEZONE: zone})
@@ -245,3 +245,11 @@ class HikvisionOptionsFlow(OptionsFlow):
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
+
+
+def _zone_unknown(name: str) -> bool:
+    """True if Home Assistant doesn't know this time zone (newer Python raises instead of returning None)."""
+    try:
+        return dt_util.get_time_zone(name) is None
+    except ValueError:
+        return True
